@@ -30,7 +30,8 @@ OBJS	+=	psp/main.o 	\
 		psp/menuplus.o \
 		psp/menuplus2.o \
 		psp/config.o \
-		psp/gamemenu.o
+		psp/gamemenu.o \
+		psp/menutext.o
 
 OBJS	+= psp/sound.o
 

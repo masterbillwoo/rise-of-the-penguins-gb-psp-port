@@ -16,6 +16,10 @@ void GameMenuShow(void);
 //Boot-time prompt for the auto resume state. Returns 1 to load it.
 int GameMenuAskResume(void);
 
+//First-run setup. Asks the few choices that change how the launcher feels, once,
+//then leaves a marker so it never asks again. Returns 1 if it ran.
+int GameMenuOnboard(void);
+
 //Title hold before play starts. resumed != 0 when a snapshot was restored.
 void GameMenuStartGate(int resumed);
 

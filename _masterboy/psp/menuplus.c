@@ -1,6 +1,7 @@
 #include "pspcommon.h"
 #include "sound.h"
 #include "menuplusint.h"
+#include "menutext.h"
 #include <psprtc.h>
 
 //Defined here, also in SMS.C
@@ -4611,6 +4612,10 @@ void menuPlusShowMenu()
 		char singleRom[MAX_PATH];
 		bSingleGameFirstBoot = 0;
 		if (!menuIsInGame && SingleGameFindRom(singleRom, sizeof(singleRom)))		{
+			//The menu's language comes from the ROM's name ("game_de.gb"), and this
+			//is the one place the full path is known to be right - reading it back
+			//out of menuConfig later proved not to be.
+			MenuStringsInit(singleRom);
 			if (MenuPlusAction(MA_LOADROM, singleRom))		{
 				char temp[MAX_PATH];
 				//Mirror what the ROM browser does after MA_LOADROM (see the

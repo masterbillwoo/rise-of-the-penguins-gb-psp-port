@@ -1,0 +1,184 @@
+%s   let go to set
+1.5x
+11 kHz
+1x
+22 kHz
+2x
+44 kHz
+A
+A and B?
+AUDIO
+All settings reset
+Always
+Analog as D-pad
+Analog deadzone
+Ask
+Audio
+Auto
+Auto-write game save
+Autofire speed
+B
+BUTTON LAYOUT
+BUTTONS
+Bezel
+Button layout
+Buttons
+CONTROLS
+CPU use
+Chunkier LCD dots, more visible
+Colour vibrance
+Colourise
+Console shell drawn around the screen
+Continue where you left off?
+Continuing where you left off
+Controls
+Could not save slot %i
+Custom
+D-pad
+Delete snapshot
+Down
+Extra gain for the built-in music player only
+Fast forward
+Fit
+Fit keeps the shape right; Wide and Full stretch it
+Flush the game's own save file to the Memory Stick now
+Frame the game in a handheld
+Framerate
+Frameskip
+Full
+GAME
+GAME BOY
+GB Color
+Game Boy
+Game Boy Color
+Game Boy Color shell, power LED and all
+Game Boy Pocket
+Game Boy Pocket shell
+Game saved
+Game's own
+Gamma
+Grid locked to GB pixels; can look banded
+Hold L while playing to open the
+Horizontal lines only, no vertical grid
+How far the stick must move before it counts
+Jump back to the snapshot in the slot above
+Just a recessed screen edge, no dots
+Keep the game's own save written every few seconds
+LCD coarse
+LCD fine
+LCD grid
+Later
+Lay an LCD texture over it?
+Layout preset
+Left
+Let go first...
+Load state
+Loaded slot %i
+Loud
+Loudest
+Machine type
+Machine type and monochrome palettes
+Menu
+Mono
+Move
+Music and sound effects?
+Never
+New
+Next slot
+No resume state
+No shell around the screen
+No state in slot %i
+No texture; plain picture
+Normal
+O back
+O is A, X is B - as on the handheld
+Off
+On
+On exit, snapshot where you were so you can carry on
+Only lines up with Screen size: Fit
+Open menu
+Original Game Boy shell
+Output
+Output level of the game audio
+Palette
+Pause
+Per-game colouring for monochrome titles
+Pixel grid
+Press X to continue
+Press a button  (%is left)
+Press any button to continue
+Prev slot
+Put every option back to how this launcher ships
+Put the PSP into sleep mode
+Quit to XMB
+READY
+RISE OF THE PENGUINS GB
+Ready to play
+Recessed
+Release the button to sleep
+Reset
+Reset all settings
+Restart
+Restart game
+Restart game now to apply?
+Restart game to switch emulated hardware
+Resume
+Resume on launch
+Resume state deleted
+Reverted to default
+Right
+SAVE / LOAD
+SCREEN
+SHORTCUTS
+SOUND
+Sample rate
+Save / Load
+Save state
+Saved to slot %i
+Scanlines
+Screen size
+Screenshot
+See what every button currently does
+Select
+Shortcuts
+Show framerate
+Sleep
+Slow motion
+Smoothing
+Snapshot on quit
+Snapshot this exact moment into the slot above
+Soft LCD dot texture, the subtle one
+Sony
+Sound
+Sound in turbo
+Start
+Start prompt
+State slot
+Stereo
+Super GB
+Texture drawn over the picture
+Throw away the quit snapshot; next launch starts fresh
+Turbo A
+Turbo B
+Up
+VIDEO
+Video
+Volume
+Volume boost
+Wait for a button press before play begins
+Welcome. A few quick choices
+What to do with that snapshot next time you start
+Which of the 10 snapshot slots Save/Load state uses
+Which way round do you want
+Wide
+Write game save
+X is A, O is B - the PSP way round
+X next  O back
+X next  O back  < > change
+X play  O back
+X select  O back  [] default
+X start
+Your own bindings, set on the Buttons page
+before you set off.
+menu and change any of this.
+shell?

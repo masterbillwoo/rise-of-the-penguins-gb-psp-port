@@ -4,7 +4,14 @@ A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 
 - **Auto-Resume & Autosave:** Picks up right where you left off when you quit or relaunch, with continuous background save protection.
 - **Custom In-Game Menu (L Trigger):** Dedicated retro-styled settings menu with custom audio chirps and controller layout viewer.
+- **First-Run Setup:** A short guided wizard on the very first launch covers button layout, bezel, LCD grid and sound, so nothing worth changing stays buried.
+- **Button Layout Presets:** Swap A and B between the Sony and Game Boy arrangements in one step, or rebind every button by hand.
+- **Sleep:** Suspend the PSP straight from the menu, without reaching for the power switch. Saves are flushed first.
 - **Custom Bezels & Shaders:** Handheld console borders (adapted from Watomsk) and authentic LCD pixel grid filters.
+- **Localised Menus:** The in-game menu and first-run setup follow the build's language -
+  all ten, including Polish and Japanese, which ship fonts of their own for the letters
+  the stock one cannot draw. The translated builds carry an XMB icon tagged with their
+  language, so they can be told apart at a glance; the English build keeps the plain one.
 - **Persistent Settings:** Video scaling, filters, volume, and control remaps save automatically.
 
 ---
@@ -26,9 +33,21 @@ A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 
 ---
 
+## 💬 Community
+
+Come say hello, report a bug, or show off a run:
+
+- [Discord](https://discord.com/invite/3jJVx87rGx)
+- [Telegram](https://t.me/pwoowoo)
+
+---
+
 ## 🕹️ Controls
 
-### In-Game (Default)
+### In-Game (Sony preset, the default)
+Swap to the **Game Boy** preset under *Controls > Layout preset* and A/B trade
+places: Circle becomes A, Cross becomes B, Triangle Turbo A, Square Turbo B.
+
 | PSP Button | Game Boy Function |
 |---|---|
 | **D-Pad / Analog Stick** | Directional Movement |
@@ -59,6 +78,10 @@ A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 - **Circle (O):** Back / Close Menu
 - **Square ([]):** Reset selected option to default
 - **L Trigger:** Toggle Menu Closed
+
+Worth knowing: *Controls > Button layout* draws the pad with every button
+labelled by what it actually does, and **Sleep** on the main page suspends the
+console after writing your save.
 
 ---
 

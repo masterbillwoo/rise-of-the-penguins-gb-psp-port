@@ -4,21 +4,38 @@
 //MasterBoy's carousel.
 
 #include <pspaudio.h>
+#include <psppower.h>
 #include "pspcommon.h"
 #include "gamemenu.h"
+#include "menutext.h"
 
-//The DMG palette the game's own art uses, lightest to darkest.
-#define GB_LIGHTEST	RGB(224, 248, 208)
-#define GB_LIGHT	RGB(136, 192, 112)
-#define GB_DARK		RGB(52, 104, 86)
-#define GB_DARKEST	RGB(8, 24, 32)
+//Rise of the Penguins GB's own four colours, lightest to darkest, taken from the
+//game project's customColorsWhite/Light/Dark/Black (project/settings.gbsres). The
+//game is authored in "mixed" colour mode, so these are what its DMG art is remapped
+//to on Game Boy Color hardware - which is what the launcher runs it as, and so what
+//the player is actually looking at. This used to be the generic DMG green every
+//emulator uses, which is precisely why the menu felt like an emulator's.
+#define GB_LIGHTEST	RGB(232, 248, 224)	//E8F8E0
+#define GB_LIGHT	RGB(176, 240, 136)	//B0F088
+#define GB_DARK		RGB(80, 152, 120)	//509878
+#define GB_DARKEST	RGB(32, 40, 80)		//202850
 
 #define PANEL_X		72
 #define PANEL_W		336
-#define PANEL_TOP	18
-#define PANEL_BOT	258
+#define PANEL_TOP	6
+#define PANEL_BOT	268
 #define ROW_H		19
-#define ROW_TOP		54
+#define ROW_TOP		56
+//The frame art is 8px tiles drawn at 2x, so it eats 16px on every side. Content
+//coordinates below are all clear of that band.
+#define FRAME_T		16
+#define TITLE_Y		28
+#define TITLE_RULE	44
+#define FOOT_RULE	(PANEL_BOT - 54)
+//18px apart, not 14: the Japanese font's glyph cell is 16 rows (see
+//build/make_font_ja.py) and at 14 the description and the hint below it touch.
+#define FOOT_DESC	(PANEL_BOT - 50)
+#define FOOT_HINT	(PANEL_BOT - 32)
 //Rows visible at once; the list scrolls rather than running past the panel.
 #define VISIBLE_ROWS	8
 
@@ -34,6 +51,7 @@ extern void SaveUserDefaultConfig(void);
 extern volatile int osl_vblCount;
 
 static OSL_IMAGE *imgCursor = NULL;
+static OSL_IMAGE *imgFrame = NULL;
 static int cursorTried = 0;
 static int stateSlot = 0;
 
@@ -193,7 +211,8 @@ enum {
 	K_ACTION,	//does something
 	K_KEY,		//ctrl.akeys[arg]
 	K_CUT,		//ctrl.acuts[arg]
-	K_PALETTE	//cycles the palettes.ini list
+	K_PALETTE,	//cycles the palettes.ini list
+	K_PRESET	//cycles the whole-pad layout presets
 };
 
 enum {
@@ -202,8 +221,8 @@ enum {
 };
 
 enum {
-	A_RESUME = 1, A_SAVESTATE, A_LOADSTATE, A_SAVENOW, A_RESET, A_QUIT,
-	A_DEFAULTS_ALL, A_DELETE_AUTO, A_BACK
+	A_RESUME = 1, A_SAVESTATE, A_LOADSTATE, A_SAVENOW, A_RESET, A_SLEEP,
+	A_QUIT, A_DEFAULTS_ALL, A_DELETE_AUTO, A_BACK
 };
 
 typedef struct {
@@ -252,6 +271,95 @@ static const char *gbTypeNames[] = {"Auto", "Game Boy", "Super GB", "GB Color"};
 //menuplus.c), so the menu edits a shadow index and maps it back.
 static int scalingIndexShadow;
 
+//--- button layout presets ---------------------------------------------------
+//Two ways round, and both are defensible: Cross is what a PSP asks you to press to
+//confirm, Circle is where A physically sits on a Game Boy. Rather than pick for the
+//player, offer them as one row - rebinding ten keys by hand to swap A and B is a
+//chore nobody should have to do.
+#define PSPK_SELECT		0x0001
+#define PSPK_START		0x0008
+#define PSPK_UP			0x0010
+#define PSPK_RIGHT		0x0020
+#define PSPK_DOWN		0x0040
+#define PSPK_LEFT		0x0080
+#define PSPK_TRIANGLE	0x1000
+#define PSPK_CIRCLE		0x2000
+#define PSPK_CROSS		0x4000
+#define PSPK_SQUARE		0x8000
+
+//Order matches the akeys union in menuplus.h:
+//up, down, left, right, button1, button2, start, auto1, auto2, select
+//
+//Those last names are Master System names, and they do NOT line up with the Game
+//Boy's A and B. gbe_updatePad() in gameboy_render.c sets the GB's B bit from
+//button1 and its A bit from button2 - the core's own comment says so. So in Game
+//Boy terms the slots read:
+//    button1 = B     button2 = A     auto1 = Turbo B     auto2 = Turbo A
+//Get this backwards and the menu confidently tells you the opposite of what the
+//pad does, which is exactly what it used to do.
+#define PRESET_KEYS 10
+#define PRESET_COUNT 2
+
+static const u32 presetKeys[PRESET_COUNT][PRESET_KEYS] = {
+	//Sony - X is A, O is B
+	{PSPK_UP, PSPK_DOWN, PSPK_LEFT, PSPK_RIGHT, PSPK_CIRCLE, PSPK_CROSS,
+	 PSPK_START, PSPK_TRIANGLE, PSPK_SQUARE, PSPK_SELECT},
+	//Game Boy - O is A, X is B, as on the handheld
+	{PSPK_UP, PSPK_DOWN, PSPK_LEFT, PSPK_RIGHT, PSPK_CROSS, PSPK_CIRCLE,
+	 PSPK_START, PSPK_SQUARE, PSPK_TRIANGLE, PSPK_SELECT},
+};
+
+//Index 0 is not a preset: it is what the row shows once the bindings have been
+//edited by hand and no longer match either table.
+static const char *presetNames[] = {"Custom", "Sony", "Game Boy"};
+static const char *presetDescs[] = {
+	"Your own bindings, set on the Buttons page",
+	"X is A, O is B - the PSP way round",
+	"O is A, X is B - as on the handheld"
+};
+static int presetIndex = 1;
+
+//Which preset the current bindings are, or 0 for none
+static void PresetPull(void)
+{
+	int p, i;
+	presetIndex = 0;
+	for (p = 0; p < PRESET_COUNT; p++)		{
+		for (i = 0; i < PRESET_KEYS; i++)
+			if (menuConfig.ctrl.akeys[i] != presetKeys[p][i])
+				break;
+		if (i == PRESET_KEYS)		{
+			presetIndex = p + 1;
+			return;
+		}
+	}
+}
+
+static void PresetApply(int which)
+{
+	int i;
+	if (which < 1 || which > PRESET_COUNT)
+		return;
+	for (i = 0; i < PRESET_KEYS; i++)
+		menuConfig.ctrl.akeys[i] = presetKeys[which - 1][i];
+	presetIndex = which;
+}
+
+//What the physical button does in the game right now, for the layout diagram.
+//Derived from the bindings rather than assumed, so the picture stays honest after
+//a preset swap or a hand edit.
+static const char *FaceLabel(u32 key)
+{
+	//See presetKeys above: button1 is the GB's B, button2 its A
+	if (menuConfig.ctrl.keys.button2 & key)	return "A";
+	if (menuConfig.ctrl.keys.button1 & key)	return "B";
+	if (menuConfig.ctrl.keys.auto2 & key)	return "TA";
+	if (menuConfig.ctrl.keys.auto1 & key)	return "TB";
+	if (menuConfig.ctrl.keys.start & key)	return "St";
+	if (menuConfig.ctrl.keys.select & key)	return "Se";
+	return "";
+}
+
 static const ITEM pageMain[] = {
 	{"Resume",             K_ACTION, 0, 0, 0, 0, 0, A_RESUME},
 	{"Video",              K_LINK,   0, 0, 0, 0, 0, P_VIDEO},
@@ -261,6 +369,8 @@ static const ITEM pageMain[] = {
 	{"Reset all settings", K_ACTION, 0, 0, 0, 0, 0, A_DEFAULTS_ALL,
 	 "Put every option back to how this launcher ships"},
 	{"Restart game",       K_ACTION, 0, 0, 0, 0, 0, A_RESET},
+	{"Sleep",              K_ACTION, 0, 0, 0, 0, 0, A_SLEEP,
+	 "Put the PSP into sleep mode"},
 	{"Quit to XMB",        K_ACTION, 0, 0, 0, 0, 0, A_QUIT},
 };
 
@@ -292,6 +402,7 @@ static const ITEM pageAudio[] = {
 };
 
 static const ITEM pageControls[] = {
+	{"Layout preset",   K_PRESET, 0, 0, 0, 0, 0, 0},
 	{"Button layout",   K_LINK,  0, 0, 0, 0, 0, P_LAYOUT,
 	 "See what every button currently does"},
 	{"Buttons",         K_LINK,  0, 0, 0, 0, 0, P_BUTTONS},
@@ -302,17 +413,20 @@ static const ITEM pageControls[] = {
 	{"Autofire speed",  K_RANGE, &menuConfig.ctrl.autofireRate,    0, 1, 10, 1, 0},
 };
 
-//Order matches the akeys union in menuplus.h
+//Indices into the akeys union in menuplus.h. A and B are deliberately crossed over
+//relative to the union's field order - see the note above presetKeys: slot 4
+//(button1) drives the Game Boy's B and slot 5 (button2) drives its A. Labelling
+//them in union order is what made the menu disagree with the game.
 static const ITEM pageButtons[] = {
 	{"Up",      K_KEY, 0, 0, 0, 0, 0, 0},
 	{"Down",    K_KEY, 0, 0, 0, 0, 0, 1},
 	{"Left",    K_KEY, 0, 0, 0, 0, 0, 2},
 	{"Right",   K_KEY, 0, 0, 0, 0, 0, 3},
-	{"A",       K_KEY, 0, 0, 0, 0, 0, 4},
-	{"B",       K_KEY, 0, 0, 0, 0, 0, 5},
+	{"A",       K_KEY, 0, 0, 0, 0, 0, 5},
+	{"B",       K_KEY, 0, 0, 0, 0, 0, 4},
 	{"Start",   K_KEY, 0, 0, 0, 0, 0, 6},
-	{"Turbo A", K_KEY, 0, 0, 0, 0, 0, 7},
-	{"Turbo B", K_KEY, 0, 0, 0, 0, 0, 8},
+	{"Turbo A", K_KEY, 0, 0, 0, 0, 0, 8},
+	{"Turbo B", K_KEY, 0, 0, 0, 0, 0, 7},
 	{"Select",  K_KEY, 0, 0, 0, 0, 0, 9},
 };
 
@@ -434,6 +548,11 @@ static void ResetItem(const ITEM *it)
 			paletteIndex = 0;
 			PalettePush();
 			break;
+		case K_PRESET:
+			//Back to the shipped layout, not to "Custom" - Custom is a state the
+			//bindings can be in, not something you can choose.
+			PresetApply(1);
+			break;
 		case K_KEY:
 			menuConfig.ctrl.akeys[it->arg] = menuConfigUserDefault->ctrl.akeys[it->arg];
 			break;
@@ -456,6 +575,59 @@ static void LoadCursor(void)
 	else
 		strcpy(path, "menu/cursor.png");
 	imgCursor = oslLoadImageFilePNG(path, OSL_IN_RAM, OSL_PF_8888);
+
+	if (gblAppPath[0])
+		snprintf(path, sizeof(path), "%s/menu/frame.png", gblAppPath);
+	else
+		strcpy(path, "menu/frame.png");
+	imgFrame = oslLoadImageFilePNG(path, OSL_IN_RAM, OSL_PF_8888);
+}
+
+//--- panel border ------------------------------------------------------------
+//The game's own dialogue frame (assets/ui/frame.png in the game project), nine-
+//sliced. Drawn at 2x so one of its pixels is the size of one of the game's pixels
+//on a 480x272 screen - at 1x the braid reads as a hairline and stops looking like
+//anything the game would draw.
+static void FrameTile(int sx, int sy, int dx, int dy)
+{
+	oslSetImageTileSize(imgFrame, sx, sy, 8, 8);
+	imgFrame->stretchX = FRAME_T;
+	imgFrame->stretchY = FRAME_T;
+	oslDrawImageXY(imgFrame, dx, dy);
+}
+
+static void DrawFrame(int x0, int y0, int x1, int y1)
+{
+	int x, y;
+
+	if (!imgFrame)		{
+		//The plain rules the menu used before the art was available
+		MyDrawFillRect(x0, y0, x0 + 3, y1, GB_LIGHT);
+		MyDrawFillRect(x0, y0, x1, y0 + 1, GB_DARK);
+		MyDrawFillRect(x0, y1 - 1, x1, y1, GB_DARK);
+		return;
+	}
+
+	//Edges, then a tile flush to the far end in case the span is not a whole number
+	//of tiles, then the corners over the lot
+	for (x = x0 + FRAME_T; x < x1 - FRAME_T; x += FRAME_T)		{
+		FrameTile(8, 0,  x, y0);
+		FrameTile(8, 16, x, y1 - FRAME_T);
+	}
+	FrameTile(8, 0,  x1 - 2 * FRAME_T, y0);
+	FrameTile(8, 16, x1 - 2 * FRAME_T, y1 - FRAME_T);
+
+	for (y = y0 + FRAME_T; y < y1 - FRAME_T; y += FRAME_T)		{
+		FrameTile(0,  8, x0, y);
+		FrameTile(16, 8, x1 - FRAME_T, y);
+	}
+	FrameTile(0,  8, x0, y1 - 2 * FRAME_T);
+	FrameTile(16, 8, x1 - FRAME_T, y1 - 2 * FRAME_T);
+
+	FrameTile(0,  0,  x0, y0);
+	FrameTile(16, 0,  x1 - FRAME_T, y0);
+	FrameTile(0,  16, x0, y1 - FRAME_T);
+	FrameTile(16, 16, x1 - FRAME_T, y1 - FRAME_T);
 }
 
 //Sample rate is stored as the rate itself, not as an index.
@@ -479,9 +651,9 @@ static void ItemValue(const ITEM *it, char *dst, int size)
 			break;
 		case K_ENUM:
 			if (!it->field)		//sample rate
-				strncpy(dst, rateNames[RateIndex()], size - 1);
+				strncpy(dst, Tr(rateNames[RateIndex()]), size - 1);
 			else if (*it->field >= 0 && *it->field < it->lo)
-				strncpy(dst, it->names[*it->field], size - 1);
+				strncpy(dst, Tr(it->names[*it->field]), size - 1);
 			break;
 		case K_RANGE:
 			snprintf(dst, size, "%i", it->field ? *it->field : 0);
@@ -494,9 +666,13 @@ static void ItemValue(const ITEM *it, char *dst, int size)
 			break;
 		case K_PALETTE:
 			if (paletteIndex <= 0 || paletteIndex > paletteCount)
-				strncpy(dst, "Game's own", size - 1);
+				strncpy(dst, Tr("Game's own"), size - 1);
 			else
 				strncpy(dst, paletteNames[paletteIndex - 1], size - 1);
+			break;
+		case K_PRESET:
+			strncpy(dst, Tr(presetNames[(presetIndex >= 0 && presetIndex <= PRESET_COUNT)
+			                            ? presetIndex : 0]), size - 1);
 			break;
 	}
 	dst[size - 1] = '\0';
@@ -539,61 +715,89 @@ static void ItemAdjust(const ITEM *it, int dir)
 				paletteIndex = 0;
 			PalettePush();
 			break;
+		case K_PRESET:		{
+			//Custom is only ever arrived at by hand-editing a binding, so stepping
+			//off it lands on a real preset and it is never stepped back onto.
+			int next = presetIndex + dir;
+			if (next < 1)
+				next = PRESET_COUNT;
+			else if (next > PRESET_COUNT)
+				next = 1;
+			PresetApply(next);
+			break;
+		}
 	}
 }
 
 //--- key capture -------------------------------------------------------------
-//MasterBoy's own redefinition routine is tied to its window system, so the menu
-//captures keys itself and draws the prompt in its own panel.
+//MasterBoy's own routine (menuRedefineGetNewKey, menuplus.c) is tied to its window
+//system, so the menu captures keys itself and draws the prompt in its own panel.
+//The behaviour is modelled on it, with its two escape hatches kept: a timeout so a
+//capture you did not mean to start always ends, and a commit on release so a tap
+//counts. The first version of this had neither and could not be got out of.
 #define STDKEYMASK 0xf80f3f9
+
+//Bits 24-27 are the analog stick, which menuKeysAnalogApply folds into the button
+//word. A stick resting off centre holds them set for good, so the old "wait until
+//nothing is held" loops had no exit at all on a drifting pad - the menu simply
+//stopped responding. Nothing here needs the stick as a binding, so it is left out.
+#define CAPTUREMASK (STDKEYMASK & ~0x0f000000u)
+
+//Frames to wait for the first press before giving up (60fps)
+#define CAPTURE_TIMEOUT 360
 
 static void DrawPage(int page, int sel, int scroll, const char *status,
                      const char *prompt);
 
 static u32 CaptureKey(int page, int sel, int scroll, const char *label)
 {
-	char prompt[80];
-	u32 value = 0;
-	int settled = 0, waited = 0;
+	char prompt[80], keyname[48];
+	u32 got = 0, held;
+	int frames;
 
-	snprintf(prompt, sizeof(prompt), "Press a button for %s", label);
-
-	//Let go of the button that opened this first
-	while (!osl_quit && (osl_keys->held.value & STDKEYMASK))		{
+	//Let go of whatever opened this first, but never wait forever
+	for (frames = 0; !osl_quit && frames < 240; frames++)		{
 		MyReadKeys();
+		if (!(osl_keys->held.value & CAPTUREMASK))
+			break;
+		safe_strcpy(prompt, Tr("Let go first..."), sizeof(prompt));
 		oslStartDrawing();
 		DrawPage(page, sel, scroll, NULL, prompt);
 		oslEndDrawing();
 		oslSyncFrame();
 	}
 
-	//Then take the next combination, once held steady for a moment
-	while (!osl_quit && settled < 20 && waited < 400)		{
-		u32 now;
+	//Everything held between the first press and the release is collected, so a
+	//combination like R+Select does not have to land on a single frame, and a quick
+	//tap is taken the moment it is let go. The old version wanted one unchanging
+	//combination held for twenty straight frames, which threw taps away and made
+	//two-button shortcuts almost impossible to enter.
+	for (frames = 0; !osl_quit; frames++)		{
 		MyReadKeys();
-		now = osl_keys->held.value & STDKEYMASK;
-		if (now && now == value)
-			settled++;
-		else		{
-			value = now;
-			settled = 0;
+		held = osl_keys->held.value & CAPTUREMASK;
+		got |= held;
+
+		//Released - that is the binding
+		if (got && !held)
+			break;
+		//Nothing at all pressed: give up rather than trapping the player here
+		if (!got && frames >= CAPTURE_TIMEOUT)
+			return 0;
+
+		if (got)		{
+			menuGetKeyName(keyname, sizeof(keyname), "+", got);
+			snprintf(prompt, sizeof(prompt), Tr("%s   let go to set"), keyname);
 		}
-		waited++;
-		oslStartDrawing();
-		DrawPage(page, sel, scroll, NULL, prompt);
-		oslEndDrawing();
-		oslSyncFrame();
-	}
+		else
+			snprintf(prompt, sizeof(prompt), Tr("Press a button  (%is left)"),
+			         (CAPTURE_TIMEOUT - frames + 59) / 60);
 
-	//Wait for release, or the new binding fires immediately
-	while (!osl_quit && (osl_keys->held.value & STDKEYMASK))		{
-		MyReadKeys();
 		oslStartDrawing();
 		DrawPage(page, sel, scroll, NULL, prompt);
 		oslEndDrawing();
 		oslSyncFrame();
 	}
-	return value;
+	return got;
 }
 
 //--- drawing -----------------------------------------------------------------
@@ -629,7 +833,7 @@ static void Cap(int cx, int cy, int w, int h, const char *sym, int active)
 static void KeyRow(int x, int y, const char *name, const char *bind)
 {
 	oslSetTextColor(GB_DARK);
-	oslDrawString(x, y, (char*)name);
+	oslDrawString(x, y, (char*)Tr(name));
 	oslSetTextColor(GB_LIGHTEST);
 	oslDrawString(x + 62, y, (char*)bind);
 }
@@ -642,12 +846,13 @@ static void DrawLayout(void)
 	int cx = bx0 + 42, cy = 112;			//d-pad centre
 	int fx = bx1 - 42, fy = 112;			//face buttons centre
 	int sp = 19, cw = 16;
-	int col2 = PANEL_X + 176, row = 176;
+	int col2 = PANEL_X + 176, row = 168;
 
-	menuGetKeyName(a,  sizeof(a),  "/", menuConfig.ctrl.akeys[4]);
-	menuGetKeyName(b,  sizeof(b),  "/", menuConfig.ctrl.akeys[5]);
-	menuGetKeyName(ta, sizeof(ta), "/", menuConfig.ctrl.akeys[7]);
-	menuGetKeyName(tb, sizeof(tb), "/", menuConfig.ctrl.akeys[8]);
+	//Crossed over for the same reason as pageButtons: 4 is B, 5 is A
+	menuGetKeyName(a,  sizeof(a),  "/", menuConfig.ctrl.akeys[5]);
+	menuGetKeyName(b,  sizeof(b),  "/", menuConfig.ctrl.akeys[4]);
+	menuGetKeyName(ta, sizeof(ta), "/", menuConfig.ctrl.akeys[8]);
+	menuGetKeyName(tb, sizeof(tb), "/", menuConfig.ctrl.akeys[7]);
 	menuGetKeyName(st, sizeof(st), "/", menuConfig.ctrl.akeys[6]);
 	menuGetKeyName(se, sizeof(se), "/", menuConfig.ctrl.akeys[9]);
 	menuGetKeyName(mn, sizeof(mn), "+", menuConfig.ctrl.cuts.menu);
@@ -669,7 +874,8 @@ static void DrawLayout(void)
 	//Screen
 	RoundRect(cx + 30, by0 + 16, fx - 30, by1 - 26, 2, GB_DARK);
 	oslSetTextColor(GB_LIGHT);
-	oslDrawString((cx + fx) / 2 - GetStringWidth("GAME") / 2, cy - 12, "GAME");
+	oslDrawString((cx + fx) / 2 - GetStringWidth((char*)Tr("GAME")) / 2, cy - 12,
+	              (char*)Tr("GAME"));
 
 	//D-pad
 	Cap(cx, cy - sp, cw, cw, "", 1);
@@ -678,11 +884,16 @@ static void DrawLayout(void)
 	Cap(cx + sp, cy, cw, cw, "", 1);
 	Cap(cx, cy, cw, cw, "", 0);
 
-	//Face buttons, in their real positions
-	Cap(fx, fy - sp, cw, cw, "T", menuConfig.ctrl.akeys[8] != 0);
-	Cap(fx, fy + sp, cw, cw, "X", menuConfig.ctrl.akeys[4] != 0);
-	Cap(fx - sp, fy, cw, cw, "S", menuConfig.ctrl.akeys[7] != 0);
-	Cap(fx + sp, fy, cw, cw, "O", menuConfig.ctrl.akeys[5] != 0);
+	//Face buttons, in their real positions, each labelled with what it does in the
+	//game rather than with its own name - the point of the picture is the mapping.
+	{
+		const char *lt = FaceLabel(PSPK_TRIANGLE), *lx = FaceLabel(PSPK_CROSS);
+		const char *ls = FaceLabel(PSPK_SQUARE),   *lo = FaceLabel(PSPK_CIRCLE);
+		Cap(fx, fy - sp, cw, cw, lt[0] ? lt : "T", lt[0] != 0);
+		Cap(fx, fy + sp, cw, cw, lx[0] ? lx : "X", lx[0] != 0);
+		Cap(fx - sp, fy, cw, cw, ls[0] ? ls : "S", ls[0] != 0);
+		Cap(fx + sp, fy, cw, cw, lo[0] ? lo : "O", lo[0] != 0);
+	}
 
 	//Start / Select
 	RoundRect(cx + 34, by1 - 20, cx + 70, by1 - 10, 2, GB_DARK);
@@ -701,7 +912,7 @@ static void DrawLayout(void)
 	KeyRow(col2,         row,      "Turbo A", ta);
 	KeyRow(col2,         row + 16, "Turbo B", tb);
 	KeyRow(col2,         row + 32, "Menu",    mn);
-	KeyRow(col2,         row + 48, "D-pad",   "Move");
+	KeyRow(col2,         row + 48, "D-pad",   Tr("Move"));
 }
 
 static void DrawPage(int page, int sel, int scroll, const char *status,
@@ -711,8 +922,11 @@ static void DrawPage(int page, int sel, int scroll, const char *status,
 	int i, shown;
 	char value[64];
 
-	//The paused game, dimmed, so the menu feels layered over it
+	//The paused game, dimmed, so the menu feels layered over it. OverlayDraw for the
+	//same reason as in the wizard: the Video page picks the shell and the grid, and
+	//cycling them behind a panel that hides them is no way to choose.
 	VideoGuUpdate_Core(menuConfig.video.render, 1);
+	OverlayDraw();
 	oslSetAlpha(OSL_FX_ALPHA, 175);
 	MyDrawFillRect(0, 0, 479, 271, GB_DARKEST);
 	oslSetAlpha(OSL_FX_DEFAULT, 0);
@@ -720,9 +934,7 @@ static void DrawPage(int page, int sel, int scroll, const char *status,
 	oslSetAlpha(OSL_FX_ALPHA, 240);
 	MyDrawFillRect(PANEL_X, PANEL_TOP, PANEL_X + PANEL_W, PANEL_BOT, GB_DARKEST);
 	oslSetAlpha(OSL_FX_DEFAULT, 0);
-	MyDrawFillRect(PANEL_X, PANEL_TOP, PANEL_X + 3, PANEL_BOT, GB_LIGHT);
-	MyDrawFillRect(PANEL_X, PANEL_TOP, PANEL_X + PANEL_W, PANEL_TOP + 1, GB_DARK);
-	MyDrawFillRect(PANEL_X, PANEL_BOT - 1, PANEL_X + PANEL_W, PANEL_BOT, GB_DARK);
+	DrawFrame(PANEL_X, PANEL_TOP, PANEL_X + PANEL_W, PANEL_BOT);
 
 	oslSetFont(ftStandard);
 	//The emulator leaves a translucent black text background set; the menu draws
@@ -730,13 +942,20 @@ static void DrawPage(int page, int sel, int scroll, const char *status,
 	oslSetBkColor(RGBA(0, 0, 0, 0));
 
 	oslSetTextColor(GB_LIGHT);
-	oslDrawString(PANEL_X + 18, 26, (char*)pg->title);
-	MyDrawFillRect(PANEL_X + 18, 42, PANEL_X + PANEL_W - 18, 43, GB_DARK);
+	oslDrawString(PANEL_X + 18, TITLE_Y, (char*)Tr(pg->title));
+	MyDrawFillRect(PANEL_X + 18, TITLE_RULE, PANEL_X + PANEL_W - 18, TITLE_RULE + 1,
+	               GB_DARK);
 
 	if (page == P_LAYOUT)		{
+		const char *pn = presetNames[(presetIndex >= 0 && presetIndex <= PRESET_COUNT)
+		                             ? presetIndex : 0];
 		DrawLayout();
+		//Right-aligned on the title line: the key list below fills every row of the
+		//panel, so there is no space left for a legend under the diagram.
 		oslSetTextColor(GB_DARK);
-		oslDrawString(PANEL_X + 20, PANEL_BOT - 22, "O back");
+		oslDrawString(PANEL_X + PANEL_W - 18 - GetStringWidth((char*)pn), TITLE_Y,
+		              (char*)pn);
+		oslDrawString(PANEL_X + 20, FOOT_HINT, (char*)Tr("O back"));
 		return;
 	}
 
@@ -751,54 +970,54 @@ static void DrawPage(int page, int sel, int scroll, const char *status,
 
 		if (selected)		{
 			oslSetAlpha(OSL_FX_ALPHA, 90);
-			MyDrawFillRect(PANEL_X + 10, ry - 3, PANEL_X + PANEL_W - 10, ry + 13,
-			               GB_DARK);
+			MyDrawFillRect(PANEL_X + FRAME_T, ry - 3,
+			               PANEL_X + PANEL_W - FRAME_T, ry + 13, GB_DARK);
 			oslSetAlpha(OSL_FX_DEFAULT, 0);
 			if (imgCursor)
-				oslDrawImageXY(imgCursor, PANEL_X - 6, ry - 4);
+				oslDrawImageXY(imgCursor, PANEL_X + 20, ry - 4);
 			oslSetTextColor(GB_LIGHTEST);
 		}
 		else
 			oslSetTextColor(GB_LIGHT);
 
-		oslDrawString(PANEL_X + 20, ry, (char*)it->label);
+		oslDrawString(PANEL_X + 40, ry, (char*)Tr(it->label));
 
 		ItemValue(it, value, sizeof(value));
 		if (value[0])		{
 			oslSetTextColor(selected ? GB_LIGHTEST : GB_DARK);
-			oslDrawString(PANEL_X + PANEL_W - 20 - GetStringWidth(value), ry, value);
+			oslDrawString(PANEL_X + PANEL_W - 26 - GetStringWidth(value), ry, value);
 		}
 	}
 
 	//Scroll markers, so it is obvious the list continues
 	oslSetTextColor(GB_DARK);
 	if (scroll > 0)
-		oslDrawString(PANEL_X + PANEL_W - 16, ROW_TOP - 13, "^");
+		oslDrawString(PANEL_X + PANEL_W - 28, ROW_TOP - 13, "^");
 	if (scroll + VISIBLE_ROWS < pg->count)
-		oslDrawString(PANEL_X + PANEL_W - 16, ROW_TOP + VISIBLE_ROWS * ROW_H - 6, "v");
+		oslDrawString(PANEL_X + PANEL_W - 28, ROW_TOP + VISIBLE_ROWS * ROW_H - 6, "v");
 
 	//Footer: what the highlighted row does, then the controls
-	MyDrawFillRect(PANEL_X + 18, PANEL_BOT - 36, PANEL_X + PANEL_W - 18,
-	               PANEL_BOT - 35, GB_DARK);
+	MyDrawFillRect(PANEL_X + 18, FOOT_RULE, PANEL_X + PANEL_W - 18, FOOT_RULE + 1,
+	               GB_DARK);
 	if (prompt)		{
 		oslSetTextColor(GB_LIGHTEST);
-		oslDrawString(PANEL_X + 20, PANEL_BOT - 28, (char*)prompt);
+		oslDrawString(PANEL_X + 20, FOOT_DESC, (char*)prompt);
 	}
 	else if (status && status[0])		{
 		oslSetTextColor(GB_LIGHTEST);
-		oslDrawString(PANEL_X + 20, PANEL_BOT - 28, (char*)status);
+		oslDrawString(PANEL_X + 20, FOOT_DESC, (char*)status);
 	}
 	else if (sel >= 0 && sel < pg->count &&
 	         pg->items[sel].field == &menuConfig.video.bezel)		{
 		int bz = menuConfig.video.bezel;
 		if (bz > 0 && menuConfig.video.render != 2)		{
 			oslSetTextColor(GB_LIGHTEST);
-			oslDrawString(PANEL_X + 20, PANEL_BOT - 28,
-			              "Only lines up with Screen size: Fit");
+			oslDrawString(PANEL_X + 20, FOOT_DESC,
+			              (char*)Tr("Only lines up with Screen size: Fit"));
 		}
 		else if (bz >= 0 && bz < 4)		{
 			oslSetTextColor(GB_LIGHT);
-			oslDrawString(PANEL_X + 20, PANEL_BOT - 28, (char*)bezelDescs[bz]);
+			oslDrawString(PANEL_X + 20, FOOT_DESC, (char*)Tr(bezelDescs[bz]));
 		}
 	}
 	else if (sel >= 0 && sel < pg->count &&
@@ -808,26 +1027,32 @@ static void DrawPage(int page, int sel, int scroll, const char *status,
 		int ov = menuConfig.video.overlay;
 		if (ov > 0 && menuConfig.video.render != 2)		{
 			oslSetTextColor(GB_LIGHTEST);
-			oslDrawString(PANEL_X + 20, PANEL_BOT - 28,
-			              "Only lines up with Screen size: Fit");
+			oslDrawString(PANEL_X + 20, FOOT_DESC,
+			              (char*)Tr("Only lines up with Screen size: Fit"));
 		}
 		else if (ov >= 0 && ov < 6)		{
 			oslSetTextColor(GB_LIGHT);
-			oslDrawString(PANEL_X + 20, PANEL_BOT - 28, (char*)filterDescs[ov]);
+			oslDrawString(PANEL_X + 20, FOOT_DESC, (char*)Tr(filterDescs[ov]));
 		}
+	}
+	else if (sel >= 0 && sel < pg->count && pg->items[sel].kind == K_PRESET)		{
+		oslSetTextColor(GB_LIGHT);
+		oslDrawString(PANEL_X + 20, FOOT_DESC,
+		              (char*)Tr(presetDescs[(presetIndex >= 0 && presetIndex <= PRESET_COUNT)
+		                                    ? presetIndex : 0]));
 	}
 	else if (sel >= 0 && sel < pg->count && pg->items[sel].desc)		{
 		oslSetTextColor(GB_LIGHT);
-		oslDrawString(PANEL_X + 20, PANEL_BOT - 28, (char*)pg->items[sel].desc);
+		oslDrawString(PANEL_X + 20, FOOT_DESC, (char*)Tr(pg->items[sel].desc));
 	}
 
 	oslSetTextColor(GB_DARK);
-	oslDrawString(PANEL_X + 20, PANEL_BOT - 14, "X select  O back  [] default");
+	oslDrawString(PANEL_X + 20, FOOT_HINT, (char*)Tr("X select  O back  [] default"));
 }
 
 //--- actions -----------------------------------------------------------------
 
-static int DoAction(int action, char *status, int size)
+static int DoAction(int action, char *status, int size, int sel, int scroll)
 {
 	status[0] = '\0';
 	switch (action)		{
@@ -835,16 +1060,16 @@ static int DoAction(int action, char *status, int size)
 			return 1;
 		case A_SAVESTATE:
 			snprintf(status, size, pspSaveState(stateSlot)
-			         ? "Saved to slot %i" : "Could not save slot %i", stateSlot);
+			         ? Tr("Saved to slot %i") : Tr("Could not save slot %i"), stateSlot);
 			break;
 		case A_LOADSTATE:
 			snprintf(status, size, pspLoadState(stateSlot)
-			         ? "Loaded slot %i" : "No state in slot %i", stateSlot);
+			         ? Tr("Loaded slot %i") : Tr("No state in slot %i"), stateSlot);
 			break;
 		case A_SAVENOW:
 			//force = 1: write even if the CRC says nothing changed
 			machine_manage_sram(SRAM_SAVE, 1);
-			strncpy(status, "Game saved", size - 1);
+			strncpy(status, Tr("Game saved"), size - 1);
 			break;
 		case A_DEFAULTS_ALL:		{
 			//Settings go back; the loaded ROM stays loaded
@@ -853,17 +1078,18 @@ static int DoAction(int action, char *status, int size)
 			memcpy(&menuConfig, menuConfigUserDefault, sizeof(MENUPARAMS));
 			strcpy(menuConfig.file.filename, rom);
 			ScalingPull();
+			PresetPull();
 			SaveUserDefaultConfig();
-			strncpy(status, "All settings reset", size - 1);
+			strncpy(status, Tr("All settings reset"), size - 1);
 			break;
 		}
 		case A_DELETE_AUTO:		{
 			char statePath[MAX_PATH];
 			pspGetStateNameEx(menuConfig.file.filename, statePath, STATE_AUTO);
 			if (sceIoRemove(statePath) >= 0)
-				strncpy(status, "Resume state deleted", size - 1);
+				strncpy(status, Tr("Resume state deleted"), size - 1);
 			else
-				strncpy(status, "No resume state", size - 1);
+				strncpy(status, Tr("No resume state"), size - 1);
 			break;
 		}
 		case A_BACK:
@@ -872,6 +1098,34 @@ static int DoAction(int action, char *status, int size)
 		case A_RESET:
 			machine_reset();
 			return 1;
+		case A_SLEEP:		{
+			//Flush game battery save and configuration before suspending: sleep is
+			//not guaranteed to be woken from, and a flat battery should not cost
+			//progress.
+			int spin = 0;
+			machine_manage_sram(SRAM_SAVE, 1);
+			SaveUserDefaultConfig();
+			//Suspend with Cross still held and the press is waiting for the game on
+			//the other side of the wake. Let go first, with a ceiling so a stuck or
+			//drifting pad cannot keep us awake forever.
+			while (!osl_quit && spin < 180 &&
+			       (osl_keys->held.value & STDKEYMASK))		{
+				MyReadKeys();
+				spin++;
+				oslStartDrawing();
+				DrawPage(P_MAIN, sel, scroll, Tr("Release the button to sleep"), NULL);
+				oslEndDrawing();
+				oslSyncFrame();
+			}
+			scePowerTick(0);
+			scePowerRequestSuspend();
+			osl_keys->pressed.value = 0;
+			//The request is asynchronous, so a few frames of the game still run
+			//before the machine actually goes down, and the wake lands back here.
+			//Hold input off across both.
+			gblSwallowInput = 120;
+			return 1;
+		}
 		case A_QUIT:
 			//SmsTerm() writes the auto state and then the battery save on the way
 			//out, so just ask the loop to finish rather than doing it here.
@@ -892,6 +1146,7 @@ int GameMenuAskResume(void)
 
 	LoadCursor();
 	SfxInit();
+	MenuStringsInit(menuConfig.file.filename);
 	oslSetFramerate(60);
 	osl_keys->pressed.value = 0;
 
@@ -929,12 +1184,12 @@ int GameMenuAskResume(void)
 		oslSetFont(ftStandard);
 		oslSetBkColor(RGBA(0, 0, 0, 0));
 		oslSetTextColor(GB_LIGHTEST);
-		oslDrawString(bx + 18, by + 16, "Continue where you left off?");
+		oslDrawString(bx + 18, by + 16, (char*)Tr("Continue where you left off?"));
 
 		oslSetTextColor(yes ? GB_LIGHTEST : GB_DARK);
-		oslDrawString(bx + 42, by + 52, "Resume");
+		oslDrawString(bx + 42, by + 52, (char*)Tr("Resume"));
 		oslSetTextColor(yes ? GB_DARK : GB_LIGHTEST);
-		oslDrawString(bx + 138, by + 52, "New");
+		oslDrawString(bx + 138, by + 52, (char*)Tr("New"));
 		if (imgCursor)
 			oslDrawImageXY(imgCursor, (yes ? bx + 22 : bx + 118) - 4, by + 48);
 
@@ -956,6 +1211,7 @@ static int GameMenuAskRestart(const char *reason)
 
 	LoadCursor();
 	SfxInit();
+	MenuStringsInit(menuConfig.file.filename);
 	oslSetFramerate(60);
 	osl_keys->pressed.value = 0;
 
@@ -993,13 +1249,13 @@ static int GameMenuAskRestart(const char *reason)
 		oslSetFont(ftStandard);
 		oslSetBkColor(RGBA(0, 0, 0, 0));
 		oslSetTextColor(GB_LIGHTEST);
-		oslDrawString(bx + 18, by + 14, reason ? reason : "Hardware changed.");
-		oslDrawString(bx + 18, by + 30, "Restart game now to apply?");
+		oslDrawString(bx + 18, by + 14, (char*)Tr(reason ? reason : "Hardware changed."));
+		oslDrawString(bx + 18, by + 30, (char*)Tr("Restart game now to apply?"));
 
 		oslSetTextColor(yes ? GB_LIGHTEST : GB_DARK);
-		oslDrawString(bx + 48, by + 60, "Restart");
+		oslDrawString(bx + 48, by + 60, (char*)Tr("Restart"));
 		oslSetTextColor(yes ? GB_DARK : GB_LIGHTEST);
-		oslDrawString(bx + 158, by + 60, "Later");
+		oslDrawString(bx + 158, by + 60, (char*)Tr("Later"));
 		if (imgCursor)
 			oslDrawImageXY(imgCursor, (yes ? bx + 28 : bx + 138) - 4, by + 56);
 
@@ -1022,6 +1278,7 @@ void GameMenuStartGate(int resumed)
 
 	LoadCursor();
 	SfxInit();
+	MenuStringsInit(menuConfig.file.filename);
 	oslSetFramerate(60);
 	osl_keys->pressed.value = 0;
 
@@ -1031,8 +1288,8 @@ void GameMenuStartGate(int resumed)
 
 	while (!osl_quit && !done)		{
 		int bx = 96, by = 92, bw = 288, bh = 92;
-		const char *line = resumed ? "Continuing where you left off"
-		                           : "Ready to play";
+		const char *line = resumed ? Tr("Continuing where you left off")
+		                           : Tr("Ready to play");
 
 		MyReadKeys();
 		frame++;
@@ -1057,7 +1314,7 @@ void GameMenuStartGate(int resumed)
 		oslSetBkColor(RGBA(0, 0, 0, 0));
 
 		oslSetTextColor(GB_LIGHT);
-		oslDrawString(bx + 20, by + 16, "RISE OF THE PENGUINS GB");
+		oslDrawString(bx + 20, by + 16, (char*)Tr("RISE OF THE PENGUINS GB"));
 		MyDrawFillRect(bx + 20, by + 32, bx + bw - 20, by + 33, GB_DARK);
 
 		oslSetTextColor(GB_LIGHTEST);
@@ -1068,7 +1325,7 @@ void GameMenuStartGate(int resumed)
 			oslSetTextColor(GB_LIGHT);
 		else
 			oslSetTextColor(GB_DARK);
-		oslDrawString(bx + 20, by + 66, "Press any button to continue");
+		oslDrawString(bx + 20, by + 66, (char*)Tr("Press any button to continue"));
 
 		if (imgCursor)
 			oslDrawImageXY(imgCursor, bx + bw - 34, by + 58);
@@ -1081,6 +1338,241 @@ void GameMenuStartGate(int resumed)
 	//The dismissing press is still held; keep it out of the game for up to two
 	//seconds, or until the pad is released
 	gblSwallowInput = 120;
+}
+
+//--- first run ---------------------------------------------------------------
+//The launcher opens straight into the game, which gives no hint that any of it can
+//be changed, so the handful of choices that actually change how it feels get asked
+//once, up front. Everything here is also on the normal menu pages; this is about
+//discoverability, not about a setting that can only be reached here. The wording
+//stays on the game rather than on the emulator underneath it - a player who bought
+//Rise of the Penguins GB did not ask to be told what a Game Boy is.
+//
+//"Done" is a marker file rather than a config key: DEFAULT.INI ships with the
+//launcher, so its presence says nothing about whether anyone has ever played.
+
+static void OnboardPath(char *dst, int size)
+{
+	if (gblAppPath[0])
+		snprintf(dst, size, "%s/setup.done", gblAppPath);
+	else
+		safe_strcpy(dst, "setup.done", size);
+}
+
+static int OnboardDone(void)
+{
+	char path[MAX_PATH];
+	SceUID fd;
+	OnboardPath(path, sizeof(path));
+	fd = sceIoOpen(path, PSP_O_RDONLY, 0777);
+	if (fd < 0)
+		return 0;
+	sceIoClose(fd);
+	return 1;
+}
+
+static void OnboardMarkDone(void)
+{
+	char path[MAX_PATH];
+	SceUID fd;
+	OnboardPath(path, sizeof(path));
+	fd = sceIoOpen(path, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+	if (fd >= 0)		{
+		sceIoWrite(fd, "1", 1);
+		sceIoClose(fd);
+	}
+}
+
+typedef struct {
+	const char *title;
+	const char *line1;
+	const char *line2;
+	int *field;			//NULL on a step that only says something
+	const char **names;
+	int count;
+	int preset;			//edits the layout preset instead of a plain field
+} STEP;
+
+static const STEP onboardSteps[] = {
+	{"RISE OF THE PENGUINS GB", "Welcome. A few quick choices", "before you set off.",
+	 0, 0, 0, 0},
+	{"BUTTONS", "Which way round do you want", "A and B?",
+	 0, 0, 0, 1},
+	{"SCREEN", "Frame the game in a handheld", "shell?",
+	 &menuConfig.video.bezel, bezelNames, 4, 0},
+	{"SCREEN", "Lay an LCD texture over it?", 0,
+	 &menuConfig.video.overlay, filterNames, 6, 0},
+	{"SOUND", "Music and sound effects?", 0,
+	 &menuConfig.sound.enabled, onOff, 2, 0},
+	{"READY", "Hold L while playing to open the", "menu and change any of this.",
+	 0, 0, 0, 0},
+};
+
+//Runs once, before the first frame of play. Returns 1 if it ran.
+int GameMenuOnboard(void)
+{
+	int step = 0, done = 0, frame = 0;
+	int nsteps = numberof(onboardSteps);
+
+	if (OnboardDone())
+		return 0;
+
+	LoadCursor();
+	SfxInit();
+	MenuStringsInit(menuConfig.file.filename);
+	PresetPull();
+	if (!presetIndex)
+		presetIndex = 1;
+	oslSetFramerate(60);
+	oslSetKeyAutorepeatInit(24);
+	oslSetKeyAutorepeatInterval(6);
+	osl_keys->autoRepeatMask = OSL_KEYMASK_LEFT | OSL_KEYMASK_RIGHT;
+	osl_keys->pressed.value = 0;
+
+	//Let go of whatever launched us, or the first step is skipped instantly
+	while (!osl_quit && (osl_keys->held.value & STDKEYMASK))
+		MyReadKeys();
+
+	while (!osl_quit && !done)		{
+		const STEP *st = &onboardSteps[step];
+		//Outer box, then the content rect inside the frame band. Everything below
+		//positions off the content rect, so the art can change thickness without
+		//every offset here having to be found and adjusted.
+		int ox = 64, oy = 44, ow = 352, oh = 184;
+		int bx = ox + FRAME_T, by = oy + FRAME_T;
+		int bw = ow - 2 * FRAME_T, bh = oh - 2 * FRAME_T;
+		char value[64];
+
+		MyReadKeys();
+		frame++;
+
+		if (st->preset)		{
+			if (osl_keys->pressed.left)		{
+				PresetApply(presetIndex > 1 ? presetIndex - 1 : PRESET_COUNT);
+				SfxPlay(SFX_MOVE);
+			}
+			if (osl_keys->pressed.right)		{
+				PresetApply(presetIndex < PRESET_COUNT ? presetIndex + 1 : 1);
+				SfxPlay(SFX_MOVE);
+			}
+		}
+		else if (st->field)		{
+			int dir = osl_keys->pressed.right ? 1 : (osl_keys->pressed.left ? -1 : 0);
+			if (dir)		{
+				*st->field += dir;
+				if (*st->field < 0)
+					*st->field = st->count - 1;
+				else if (*st->field >= st->count)
+					*st->field = 0;
+				SfxPlay(SFX_MOVE);
+			}
+		}
+
+		if (osl_keys->pressed.cross || osl_keys->pressed.start)		{
+			SfxPlay(SFX_SELECT);
+			if (++step >= nsteps)
+				done = 1;
+		}
+		if (osl_keys->pressed.circle)		{
+			SfxPlay(SFX_BACK);
+			if (step > 0)
+				step--;
+		}
+		if (step < 0)
+			step = 0;
+		if (step >= nsteps)
+			step = nsteps - 1;
+		st = &onboardSteps[step];
+
+		//Before oslStartDrawing: the shell and grid images are loaded here, so the
+		//choice on those two steps is previewed live behind the panel.
+		OverlaySync();
+
+		oslStartDrawing();
+		VideoGuUpdate_Core(menuConfig.video.render, 1);
+		//VideoGuUpdate_Core draws the picture; the shell and grid come from
+		//OverlayDraw, which normally runs a level up in VideoGuUpdate. Without it
+		//those two steps would be choosing something you cannot see.
+		OverlayDraw();
+		oslSetAlpha(OSL_FX_ALPHA, 190);
+		MyDrawFillRect(0, 0, 479, 271, GB_DARKEST);
+		oslSetAlpha(OSL_FX_DEFAULT, 0);
+
+		MyDrawFillRect(ox, oy, ox + ow, oy + oh, GB_DARKEST);
+		DrawFrame(ox, oy, ox + ow, oy + oh);
+
+		oslSetFont(ftStandard);
+		oslSetBkColor(RGBA(0, 0, 0, 0));
+
+		oslSetTextColor(GB_LIGHT);
+		oslDrawString(bx + 20, by + 14, (char*)Tr(st->title));
+		//Which of the steps this is, so the end is in sight
+		{
+			char pos[16];
+			snprintf(pos, sizeof(pos), "%i/%i", step + 1, nsteps);
+			oslDrawString(bx + bw - 20 - GetStringWidth(pos), by + 14, pos);
+		}
+		MyDrawFillRect(bx + 20, by + 30, bx + bw - 20, by + 31, GB_DARK);
+
+		oslSetTextColor(GB_LIGHTEST);
+		if (st->line1)
+			oslDrawString(bx + 20, by + 42, (char*)Tr(st->line1));
+		if (st->line2)
+			oslDrawString(bx + 20, by + 58, (char*)Tr(st->line2));
+
+		if (st->preset || st->field)		{
+			int vy = by + 88;
+			if (st->preset)
+				safe_strcpy(value, Tr(presetNames[presetIndex]), sizeof(value));
+			else
+				safe_strcpy(value, Tr(st->names[*st->field]), sizeof(value));
+
+			//Arrows either side, so it reads as something to change rather than as
+			//a label
+			oslSetTextColor(GB_LIGHT);
+			oslDrawString(bx + 24, vy, "<");
+			oslDrawString(bx + bw - 32, vy, ">");
+			oslSetTextColor(GB_LIGHTEST);
+			oslDrawString(bx + bw / 2 - GetStringWidth(value) / 2, vy, value);
+
+			oslSetTextColor(GB_LIGHT);
+			if (st->preset)
+				oslDrawString(bx + 20, vy + 20, (char*)Tr(presetDescs[presetIndex]));
+			else if (st->field == &menuConfig.video.overlay)
+				oslDrawString(bx + 20, vy + 20, (char*)Tr(filterDescs[*st->field]));
+			else if (st->field == &menuConfig.video.bezel)
+				oslDrawString(bx + 20, vy + 20, (char*)Tr(bezelDescs[*st->field]));
+		}
+		else if ((frame / 30) & 1)		{
+			oslSetTextColor(GB_LIGHT);
+			oslDrawString(bx + 20, by + 96, (char*)Tr("Press X to continue"));
+		}
+
+		oslSetTextColor(GB_DARK);
+		if (!step)
+			oslDrawString(bx + 20, by + bh - 22, (char*)Tr("X start"));
+		else if (step == nsteps - 1)
+			oslDrawString(bx + 20, by + bh - 22, (char*)Tr("X play  O back"));
+		else if (st->preset || st->field)
+			oslDrawString(bx + 20, by + bh - 22, (char*)Tr("X next  O back  < > change"));
+		else
+			oslDrawString(bx + 20, by + bh - 22, (char*)Tr("X next  O back"));
+
+		if (imgCursor)
+			oslDrawImageXY(imgCursor, bx + bw - 34, by + bh - 26);
+
+		oslEndDrawing();
+		oslSyncFrame();
+	}
+
+	//Keep what was chosen, and do not ask again
+	OverlaySync();
+	SaveUserDefaultConfig();
+	OnboardMarkDone();
+
+	osl_keys->pressed.value = 0;
+	gblSwallowInput = 120;
+	return 1;
 }
 
 //Where the menu was when it last closed. Kept between openings so that changing a
@@ -1122,9 +1614,11 @@ void GameMenuShow(void)
 	status[0] = '\0';
 	LoadCursor();
 	SfxInit();
+	MenuStringsInit(menuConfig.file.filename);
 	ScalingPull();
 	PaletteScan();
 	PalettePull();
+	PresetPull();
 
 	oslSetFramerate(60);
 	oslSetKeyAutorepeatInit(24);
@@ -1168,7 +1662,8 @@ void GameMenuShow(void)
 		if (osl_keys->pressed.square)		{
 			ResetItem(it);
 			ScalingPush();
-			strcpy(status, "Reverted to default");
+			PresetPull();
+			safe_strcpy(status, Tr("Reverted to default"), sizeof(status));
 			statusTime = 120;
 			SfxPlay(SFX_SELECT);
 		}
@@ -1197,13 +1692,15 @@ void GameMenuShow(void)
 					quit = 1;
 			}
 			else if (it->kind == K_ACTION)		{
-				quit = DoAction(it->arg, status, sizeof(status));
+				quit = DoAction(it->arg, status, sizeof(status), sel, scroll);
 				statusTime = 120;
 			}
 			else if (it->kind == K_KEY)		{
 				u32 k = CaptureKey(page, sel, scroll, it->label);
 				if (k)
 					menuConfig.ctrl.akeys[it->arg] = k;
+				//A hand edit may have moved off a preset, or back onto one
+				PresetPull();
 			}
 			else if (it->kind == K_CUT)		{
 				u32 k = CaptureKey(page, sel, scroll, it->label);

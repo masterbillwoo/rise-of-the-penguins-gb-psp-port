@@ -225,6 +225,29 @@ def folder_and_title(rom_name, base_title):
     return folder, title
 
 
+def icon_for(rom_name):
+    """XMB icon for this build. The translations get one tagged with their
+    language so ten launchers can be told apart; the English build is the plain
+    one and keeps the untouched icon. Also falls back to it when
+    build/make_icons.py has not been run."""
+    plain = os.path.join(CONFIG_SRC, "ICON0.PNG")
+    code = lang_of(rom_name)
+    if not code:
+        return plain
+    tagged = os.path.join(CONFIG_SRC, "icons", "ICON0_%s.PNG" % code)
+    return tagged if os.path.isfile(tagged) else plain
+
+
+def lang_of(rom_name):
+    """Language suffix of a ROM filename, or None for the plain English build."""
+    stem = os.path.splitext(rom_name)[0]
+    if "_" in stem:
+        suffix = stem.split("_", 1)[1]
+        if suffix in LANGUAGES:
+            return suffix
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--title", default="Rise of the Penguins GB",
@@ -254,7 +277,7 @@ def main():
         os.makedirs(os.path.join(dest, "roms"))
 
         build_eboot(args.eboot, os.path.join(dest, "EBOOT.PBP"), title,
-                    icon0=os.path.join(CONFIG_SRC, "ICON0.PNG"),
+                    icon0=icon_for(rom),
                     pic1=os.path.join(CONFIG_SRC, "PIC1.PNG"),
                     snd0=os.path.join(CONFIG_SRC, "SND0.AT3"),
                     strip_snd=args.strip_sound)
@@ -291,6 +314,16 @@ def main():
                 shutil.copytree(src, target)
             else:
                 shutil.copy2(src, target)
+
+        # Some languages need letters the stock 256-glyph font does not carry
+        # (Polish has none of l-stroke, a-ogonek, s-acute...). Each build has its
+        # own Res/, so those ship a font of their own rather than everyone paying
+        # for glyphs they will never draw. See build/make_font_pl.py.
+        code = lang_of(rom)
+        langfont = os.path.join(CONFIG_SRC, "font_%s.oft" % (code or "").lower())
+        if code and os.path.exists(langfont):
+            shutil.copy2(langfont, os.path.join(dest, "Res", "font.oft"))
+            print("  %-22s   + %s font" % ("", code))
 
         print("%-24s -> %s" % (folder, title))
 

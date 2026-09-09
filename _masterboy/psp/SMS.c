@@ -443,6 +443,8 @@ void SmsEmulate()
 	int nbRenderedFramesPerSec, nbVirtualFramesPerSec, lastVCount, vsyncAdd;
 //	int cpuTime = 0, frameskipLower = 0, skippedFrames = 0, tmp;
 	int frameskip = 0;
+	//Set when the first-run wizard actually ran, so the start gate can stand down
+	int onboarded = 0;
 
 	memset(&bitmap, 0, sizeof(bitmap_t));
 	bitmap.width  = 256;
@@ -490,6 +492,11 @@ void SmsEmulate()
 	if (gblMachineType == EM_GBC && menuConfig.gameboy.palette[0])
 		OuvreFichierConfig("palettes.ini", menuConfig.gameboy.palette);
 
+	//=== FIRST RUN ===
+	//Before the resume prompt: on a first launch there is nothing to resume, and if
+	//there somehow is, the player should have set the pad up before being asked.
+	onboarded = GameMenuOnboard();
+
 	//=== AUTO RESUME ===
 	//Now that the machine is up, restore the state written when the player last
 	//quit. Asking is opt-in: autoStateLoad 2 just resumes, 1 offers the choice.
@@ -523,7 +530,12 @@ void SmsEmulate()
 		//Hold on the title until the player is ready, and tell them if this is a
 		//continue rather than a fresh start - otherwise a resume drops you into the
 		//middle of the action with no warning.
-		if (menuConfig.file.startPrompt || resumed)
+		//
+		//Not straight after the first-run wizard, though: its last step is already a
+		//"press X to play" hold, and following one with another that says "Ready to
+		//play" reads as the launcher not knowing you just answered it. A resume is
+		//the exception - that one is telling you something the wizard did not.
+		if ((menuConfig.file.startPrompt && !onboarded) || resumed)
 			GameMenuStartGate(resumed);
 	}
 
