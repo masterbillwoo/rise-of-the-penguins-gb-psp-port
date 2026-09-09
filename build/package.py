@@ -294,7 +294,19 @@ def main():
 
         print("%-24s -> %s" % (folder, title))
 
+    # Generate cleanly named zip archives in dist/releases ready for Itch.io / GitHub release
+    releases_dir = os.path.join(args.out, "releases")
+    os.makedirs(releases_dir, exist_ok=True)
+    print("\nCreating release zip archives in %s..." % releases_dir)
+    for rom in roms:
+        folder, title = folder_and_title(rom, args.title)
+        zip_base_name = "%s (PSP)" % title
+        zip_path = os.path.join(releases_dir, zip_base_name)
+        shutil.make_archive(zip_path, "zip", root_dir=args.out, base_dir=folder)
+        print("  -> %s.zip" % zip_base_name)
+
     print("\n%d launcher(s) written to %s" % (len(roms), args.out))
+    print("Release zips ready in %s" % releases_dir)
     print("Copy each folder into ms0:/PSP/GAME/ on your PSP.")
 
 
