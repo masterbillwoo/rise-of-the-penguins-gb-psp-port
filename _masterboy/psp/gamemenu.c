@@ -5,6 +5,8 @@
 
 #include <pspaudio.h>
 #include <psppower.h>
+#include <psprtc.h>
+#include <psputility.h>
 #include "pspcommon.h"
 #include "gamemenu.h"
 #include "menutext.h"
@@ -583,6 +585,130 @@ static void LoadCursor(void)
 	imgFrame = oslLoadImageFilePNG(path, OSL_IN_RAM, OSL_PF_8888);
 }
 
+//--- status line -------------------------------------------------------------
+//MasterBoy's own carousel showed the clock and the battery; this menu replaced it
+//and lost them. Read once a second rather than per frame - sceRtc and the power
+//calls are not free, and nothing here changes faster than that.
+
+static char statusClock[24];	//date and time
+static char statusTime[12];	//time alone, for when the title leaves no room
+static int statusPercent = -1, statusAC = 0, statusLow = 0;
+
+static void StatusRefresh(void)
+{
+	ScePspDateTime now;
+	int fmt = PSP_SYSTEMPARAM_DATE_FORMAT_DDMMYYYY;
+	char date[12];
+
+	sceRtcGetCurrentClockLocalTime(&now);
+
+	//Follow the console's own date order instead of picking one: 09/12 means
+	//different days eight time zones apart, and the PSP already knows which.
+	if (sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_DATE_FORMAT, &fmt) < 0)
+		fmt = PSP_SYSTEMPARAM_DATE_FORMAT_DDMMYYYY;
+	if (fmt == PSP_SYSTEMPARAM_DATE_FORMAT_DDMMYYYY)
+		snprintf(date, sizeof(date), "%02i/%02i", now.day, now.month);
+	else
+		snprintf(date, sizeof(date), "%02i/%02i", now.month, now.day);
+
+	snprintf(statusTime, sizeof(statusTime), "%02i:%02i", now.hour, now.minute);
+	snprintf(statusClock, sizeof(statusClock), "%s %s", date, statusTime);
+
+	statusAC = scePowerIsPowerOnline();
+	statusPercent = scePowerIsBatteryExist() ? scePowerGetBatteryLifePercent() : -1;
+	if (statusPercent > 100)
+		statusPercent = 100;
+	//The console's own threshold, plus a floor of our own: a PSP reports "low"
+	//late, and the point of this is warning rather than confirmation.
+	statusLow = !statusAC &&
+	            (scePowerIsLowBattery() || (statusPercent >= 0 && statusPercent <= 20));
+
+}
+
+#define BATT_W		18	//body plus terminal
+#define BATT_H		8
+#define BATT_SEGS	4	//quarters: readable at a glance, the number gives the rest
+
+//Four discrete segments rather than a sliding fill. With a four-colour palette a
+//continuous bar cannot tell 20% from 30% - it is one pixel of difference - so the
+//gauge shows the quarter you are in and the percentage beside it says exactly.
+static void DrawBattery(int x, int y)
+{
+	//Charging and nearly-flat must never look alike, so they use different
+	//signals entirely: a bolt for one, a blink for the other.
+	int blink = statusLow && ((osl_vblCount / 30) & 1);
+	OSL_COLOR shell = statusLow ? GB_LIGHTEST : GB_LIGHT;
+	int lit, i;
+
+	if (blink)
+		return;
+
+	//Shell: outline, hollow centre, terminal on the right
+	MyDrawFillRect(x, y, x + 15, y + BATT_H, shell);
+	MyDrawFillRect(x + 1, y + 1, x + 14, y + BATT_H - 1, GB_DARKEST);
+	MyDrawFillRect(x + 15, y + 3, x + BATT_W, y + 6, shell);
+
+	if (statusPercent < 0)
+		return;
+
+	if (statusAC)		{
+		//A bolt through the middle. Unmistakably "charging" - and nothing else
+		//in the menu draws one, so it cannot be read as anything but that.
+		static const char bolt[5] = {0x0C, 0x06, 0x0F, 0x0C, 0x18};
+		for (i = 0; i < 5; i++)		{
+			int c;
+			for (c = 0; c < 5; c++)
+				if (bolt[i] & (1 << c))
+					MyDrawFillRect(x + 5 + c, y + 2 + i,
+					               x + 6 + c, y + 3 + i, GB_LIGHTEST);
+		}
+		return;
+	}
+
+	//Round up, so a battery with anything left in it always shows one segment
+	lit = (statusPercent * BATT_SEGS + 99) / 100;
+	for (i = 0; i < lit && i < BATT_SEGS; i++)
+		MyDrawFillRect(x + 2 + i * 3, y + 2, x + 4 + i * 3, y + BATT_H - 2, shell);
+}
+
+//Right-aligned on the title row. The date is dropped rather than allowed to run
+//into a long title - "RISE OF THE PENGUINS GB" leaves the least room of any page,
+//and a translated title could be longer still.
+static void DrawStatus(const char *title)
+{
+	int right = PANEL_X + PANEL_W - 18;
+	int limit = PANEL_X + 18 + GetStringWidth((char*)title) + 12;
+	char text[40];
+	int x;
+
+	//Decide on the widest reading this can ever be, not the current one. Measuring
+	//the live text made the date disappear at 100% and come back at 99%, because
+	//the extra digit was just enough to trip the fallback.
+	if (statusPercent >= 0)
+		snprintf(text, sizeof(text), "%s  100%%", statusClock);
+	else
+		safe_strcpy(text, statusClock, sizeof(text));
+	x = right - BATT_W - 6 - GetStringWidth(text);
+
+	if (statusPercent >= 0)
+		snprintf(text, sizeof(text), "%s  %i%%", statusClock, statusPercent);
+	else
+		safe_strcpy(text, statusClock, sizeof(text));
+
+	if (x < limit)		{
+		if (statusPercent >= 0)
+			snprintf(text, sizeof(text), "%s  %i%%", statusTime, statusPercent);
+		else
+			safe_strcpy(text, statusTime, sizeof(text));
+	}
+	//Right-aligned from the actual text, whichever form was chosen
+	x = right - BATT_W - 6 - GetStringWidth(text);
+
+	DrawBattery(right - BATT_W, TITLE_Y + 3);
+	oslSetTextColor(statusLow ? GB_LIGHTEST : GB_DARK);
+	oslDrawString(x, TITLE_Y, text);
+}
+
 //--- panel border ------------------------------------------------------------
 //The game's own dialogue frame (assets/ui/frame.png in the game project), nine-
 //sliced. Drawn at 2x so one of its pixels is the size of one of the game's pixels
@@ -941,21 +1067,32 @@ static void DrawPage(int page, int sel, int scroll, const char *status,
 	//its own panel, so text should sit directly on it.
 	oslSetBkColor(RGBA(0, 0, 0, 0));
 
+	//Once a second, off the vblank counter the menu already runs on
+	{
+		static int lastSecond = -1;
+		int second = osl_vblCount / 60;
+		if (second != lastSecond)		{
+			lastSecond = second;
+			StatusRefresh();
+		}
+	}
+
 	oslSetTextColor(GB_LIGHT);
 	oslDrawString(PANEL_X + 18, TITLE_Y, (char*)Tr(pg->title));
+	DrawStatus(Tr(pg->title));
 	MyDrawFillRect(PANEL_X + 18, TITLE_RULE, PANEL_X + PANEL_W - 18, TITLE_RULE + 1,
 	               GB_DARK);
 
 	if (page == P_LAYOUT)		{
-		const char *pn = presetNames[(presetIndex >= 0 && presetIndex <= PRESET_COUNT)
-		                             ? presetIndex : 0];
+		const char *pn = Tr(presetNames[(presetIndex >= 0 && presetIndex <= PRESET_COUNT)
+		                                ? presetIndex : 0]);
 		DrawLayout();
-		//Right-aligned on the title line: the key list below fills every row of the
-		//panel, so there is no space left for a legend under the diagram.
+		//The title line now carries the clock, so the preset name sits on the
+		//footer beside "O back" - the key list fills every row in between.
 		oslSetTextColor(GB_DARK);
-		oslDrawString(PANEL_X + PANEL_W - 18 - GetStringWidth((char*)pn), TITLE_Y,
-		              (char*)pn);
 		oslDrawString(PANEL_X + 20, FOOT_HINT, (char*)Tr("O back"));
+		oslDrawString(PANEL_X + PANEL_W - 26 - GetStringWidth((char*)pn), FOOT_HINT,
+		              (char*)pn);
 		return;
 	}
 

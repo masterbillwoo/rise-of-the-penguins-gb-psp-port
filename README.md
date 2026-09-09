@@ -2,8 +2,13 @@
 
 A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 
+[![Rise of the Penguins GB on PSP](docs/screenshots/01-title.png)](https://youtu.be/eO2SXsNq2-w)
+
+▶️ **[Watch it running on YouTube](https://youtu.be/eO2SXsNq2-w)**
+
 - **Auto-Resume & Autosave:** Picks up right where you left off when you quit or relaunch, with continuous background save protection.
-- **Custom In-Game Menu (L Trigger):** Dedicated retro-styled settings menu with custom audio chirps and controller layout viewer.
+- **Custom In-Game Menu (L Trigger):** Dedicated retro-styled settings menu with custom audio
+  chirps and controller layout viewer, with the date, clock and battery gauge along the top.
 - **First-Run Setup:** A short guided wizard on the very first launch covers button layout, bezel, LCD grid and sound, so nothing worth changing stays buried.
 - **Button Layout Presets:** Swap A and B between the Sony and Game Boy arrangements in one step, or rebind every button by hand.
 - **Sleep:** Suspend the PSP straight from the menu, without reaching for the power switch. Saves are flushed first.
@@ -30,6 +35,21 @@ A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 - [Chrome Web Store](https://chromewebstore.google.com/detail/rise-of-the-penguins-gb/jekackfalnabbmpmfhgkjhgggnndhcod)
 - [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/rise-of-the-penguins-gb/miokjomgpgejnagijfinmehmdhmeehfn)
 - [Firefox Add-on](https://addons.mozilla.org/en-US/firefox/addon/riseofthepenguinsgb/)
+
+---
+
+## 📸 Screenshots
+
+| | |
+|---|---|
+| ![First-run setup](docs/screenshots/02-first-run.png) | ![Choosing the button layout](docs/screenshots/03-first-run-buttons.png) |
+| **First-run setup** — asked once, on the very first launch | **Button layout** — Sony or Game Boy, chosen up front |
+| ![In-game menu](docs/screenshots/04-menu.png) | ![Video settings](docs/screenshots/05-video.png) |
+| **In-game menu** — hold L, with the clock and battery along the top | **Video settings** — every row explains itself as you land on it |
+| ![Button layout diagram](docs/screenshots/06-button-layout.png) | ![Japanese menu](docs/screenshots/07-japanese.png) |
+| **Button layout** — drawn from the live bindings, so it is never out of date | **Japanese** — kana and kanji from the game's own font |
+| ![Polish menu](docs/screenshots/08-polish.png) | |
+| **Polish** — ships a font of its own for the letters the stock one lacks | |
 
 ---
 
