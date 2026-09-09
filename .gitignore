@@ -1,0 +1,33 @@
+# Build outputs & compiled binaries
+build/out/
+dist/
+*.o
+*.a
+*.elf
+*.prx
+*.pbp
+*.PBP
+*.SFO
+
+# Reference / scratch emulators & proprietary tools
+_*
+!/_masterboy/
+at3tool/
+at3tool.zip
+
+# Save data & runtime artifacts
+roms/SAVE/
+*.sav
+*.sav.gz
+*.auto.gz
+*.auto.gz.try
+*.sv*.gz
+*.ini.bak
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
