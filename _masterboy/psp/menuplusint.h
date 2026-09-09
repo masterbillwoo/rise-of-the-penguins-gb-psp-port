@@ -1,0 +1,68 @@
+#define MAX_FRAMESKIP 4
+
+void menuSoundShowDisplay();
+void SelectSubMenuItemPosition(SUBMENU *s, int pos);
+int SubMenuItemPositionSelected(SUBMENU *menu, SUBMENUITEM *item);
+int SubMenuItemPositionCanceled(SUBMENU *menu, SUBMENUITEM *item);
+void UpdateMenus(int elements);
+char SelectSubMenuItemPositionByValueInt(SUBMENU *menu, int param);
+void SelectSubMenu(SUBMENU *s, char isNew);
+int GetIntFromDigits(SUBMENUMINMAX *mm);
+void CloseChoice(CHOICEMENU *h);
+void fadeInit(int value, int reason);
+void CloseWindow(WINDOW *w, int valid);
+SUBMENUITEM *GetSubMenuItemByInt(SUBMENU *menu, int value);
+void ShowMenuJoystickCalibration();
+void DrawBackground();
+void DrawBackgroundAfter();
+void menuSetStatusBarMessageDirect(char *message);
+void menuSetStatusBarMessageIndirect(char *message);
+void DrawWindow(WINDOW *w);
+void HandleWindow(WINDOW *w);
+void menuStandardVblank();
+void menuGetMenuKeys(u32 *pad);
+void LoadDefaultMachineConfig();
+void ShowMenuFileSelect(char *savepath, int pathSlot);
+void ShowMenuCheatManager();
+
+
+extern int LARGEUR_MENU;
+extern int MENU_MAX_DISPLAYED_OPTIONS;
+
+extern OSL_IMAGE *imgIcons, *imgNumbers, *imgBord, *imgBack;
+extern OSL_FONT *ftStandard, *ftGlow;
+extern HINT gblHint;
+extern CHOICEMENU gblChoice;
+//extern MENUPARAMS menuConfig, menuConfigDefault, menuConfigUserDefault;
+extern WINDOW *menuCurrentWindow;
+extern WINDOW winMsgBox;
+extern int fadeLevel, fadeDirection, fadeReason, menuAnimateCursor;
+extern SceIoDirent dirEntry;
+extern char menuFileSelectPath[MAX_PATH];
+extern char menuFileSelectFileName[MAX_PATH];
+extern int menuMainSelectedOption;
+extern MENUPRESSEDKEYS menuPressedKeys;
+extern int menuPressedKeysAutorepeatInit, menuPressedKeysAutorepeatDelay, menuPressedKeysAutorepeatMask;
+extern char menuStatusMessage[200];
+extern int menuStatusActive;
+extern int menuStatusPosition, menuStatusDrawn;
+extern char menuPlusTerminated;
+extern char menuStickMessageDisplayed;
+extern int gblMenuAlpha, menuFrameNb, frameCount;
+extern int menuIsInGame, menuUpdateRender;
+extern char *menuStatusBarMessage;
+extern char menuStatusBarMessageInd[256];
+extern int gblFlagLoadParams;
+extern u32 gblShortcutKey;
+extern char menuTempMessageText[256];
+extern char menuMusicLocked;
+extern int gblConfigAutoShowCrc, gblModeColorIt;
+
+typedef struct		{
+	char *szExt;
+	int nExtId;
+} STEXTENSIONLIST;
+extern STEXTENSIONLIST *stExtentions;
+extern STEXTENSIONLIST stRomExtentions[], stMusicExtentions[], stCheatExtensions[];
+
+#define MSGBOX_MAX_MULTIPLY 256
