@@ -9,6 +9,23 @@ A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 
 ---
 
+## 🐧 Get the Game
+
+- [Steam](https://store.steampowered.com/app/3404520/Rise_of_the_Penguins_GB/)
+- [itch.io](https://billwoo.itch.io/rise-of-the-penguins-gb)
+- [Epic Games Store](https://store.epicgames.com/en-US/p/rise-of-the-penguins-gb-e40916)
+- [Microsoft Store](https://apps.microsoft.com/detail/9n27rwtgzsc4)
+- [Google Play](https://play.google.com/store/apps/details?id=com.pwoo.riseofthepenguinsgb)
+- [PortMaster](https://portmaster.games/detail.html?name=riseofthepenguinsgb)
+- [Flathub](https://flathub.org/en/apps/io.github.masterbillwoo.RiseOfThePenguinsGB)
+- [Newgrounds](https://www.newgrounds.com/portal/view/978420)
+- [Game Jolt](https://gamejolt.com/games/riseofthepenguinsgb/990375)
+- [Chrome Web Store](https://chromewebstore.google.com/detail/rise-of-the-penguins-gb/jekackfalnabbmpmfhgkjhgggnndhcod)
+- [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/rise-of-the-penguins-gb/miokjomgpgejnagijfinmehmdhmeehfn)
+- [Firefox Add-on](https://addons.mozilla.org/en-US/firefox/addon/riseofthepenguinsgb/)
+
+---
+
 ## 🕹️ Controls
 
 ### In-Game (Default)
