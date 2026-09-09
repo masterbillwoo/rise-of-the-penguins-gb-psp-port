@@ -42,14 +42,12 @@ A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 
 | | |
 |---|---|
-| ![First-run setup](docs/screenshots/02-first-run.png) | ![Choosing the button layout](docs/screenshots/03-first-run-buttons.png) |
-| **First-run setup** — asked once, on the very first launch | **Button layout** — Sony or Game Boy, chosen up front |
+| ![Gameplay](docs/screenshots/07-gameplay.png) | ![First-run setup](docs/screenshots/02-first-run.png) |
+| **In game**, running through the Game Boy Color shell | **First-run setup** — asked once, on the very first launch |
 | ![In-game menu](docs/screenshots/04-menu.png) | ![Video settings](docs/screenshots/05-video.png) |
 | **In-game menu** — hold L, with the clock and battery along the top | **Video settings** — every row explains itself as you land on it |
-| ![Button layout diagram](docs/screenshots/06-button-layout.png) | ![Japanese menu](docs/screenshots/07-japanese.png) |
+| ![Button layout diagram](docs/screenshots/06-button-layout.png) | ![Japanese menu](docs/screenshots/08-japanese.png) |
 | **Button layout** — drawn from the live bindings, so it is never out of date | **Japanese** — kana and kanji from the game's own font |
-| ![Polish menu](docs/screenshots/08-polish.png) | |
-| **Polish** — ships a font of its own for the letters the stock one lacks | |
 
 ---
 
