@@ -1,6 +1,6 @@
-# Rise of the Penguins GB — PSP Edition
+# Rise of the Penguins GB — PSP Port
 
-A standalone PlayStation Portable (PSP) release of **Rise of the Penguins GB**.
+A standalone PlayStation Portable (PSP) port of **Rise of the Penguins GB**.
 
 - **Auto-Resume & Autosave:** Picks up right where you left off when you quit or relaunch, with continuous background save protection.
 - **Custom In-Game Menu (L Trigger):** Dedicated retro-styled settings menu with custom audio chirps and controller layout viewer.
@@ -77,7 +77,7 @@ This builds the EBOOT binary inside the PSPSDK container and packages the standa
 
 ## ⚖️ License & Credits
 
+- **Rise of the Penguins GB:** Original game, art, and assets © All rights reserved.
 - **MasterBoy Core:** Licensed under the [GNU General Public License v2.0](LICENSE). Derived from MasterBoy 2.10 by Brunnis and upstream contributors.
-- **Rise of the Penguins GB:** Original game assets and code copyright their respective creators.
 - **Console Bezels & LCD Overlays:** Adapted from Watomsk's handheld overlay collection, tailored for PSP 480x272 display geometry.
 

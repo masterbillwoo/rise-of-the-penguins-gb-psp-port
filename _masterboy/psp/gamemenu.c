@@ -31,6 +31,7 @@ extern int pspLoadState(int slot);
 extern MENUPARAMS *menuConfigUserDefault;
 extern char *menuGetKeyName(char *dest, u32 maxLen, char *separator, u32 key);
 extern void SaveUserDefaultConfig(void);
+extern volatile int osl_vblCount;
 
 static OSL_IMAGE *imgCursor = NULL;
 static int cursorTried = 0;
@@ -168,7 +169,7 @@ static void SfxPlay(int which)
 {
 	int vol;
 	static int sfxLastTick = 0;
-	int now = (int)osl_frameRateCounter;
+	int now = osl_vblCount;
 	if (sfxChannel < 0 || !menuConfig.sound.enabled)
 		return;
 	if (which == SFX_MOVE && now == sfxLastTick)
@@ -245,7 +246,7 @@ static const char *rateNames[] = {"11 kHz", "22 kHz", "44 kHz"};
 static const char *stereoNames[] = {"Stereo", "Mono"};
 static const char *boostNames[] = {"Normal", "Loud", "Loudest"};
 static const char *fpsNames[] = {"Off", "CPU use", "Framerate"};
-static const char *gbTypeNames[] = {"Auto", "Game Boy", "Super GB", "GB Color", "GB Advance"};
+static const char *gbTypeNames[] = {"Auto", "Game Boy", "Super GB", "GB Color"};
 
 //menuConfig.video.render is not a 0..n index (see menuMainVideoScalingItems in
 //menuplus.c), so the menu edits a shadow index and maps it back.
@@ -359,8 +360,8 @@ static const ITEM pageSave[] = {
 //A_BACK rather than A_RESUME: on a page that is just a picture, the obvious key
 //should step back to Controls, not close the whole menu.
 static const ITEM pageGameBoy[] = {
-	{"Machine type", K_ENUM, &menuConfig.gameboy.gbType, gbTypeNames, 5, 0, 0, 0,
-	 "Restart the game for a change here to take effect"},
+	{"Machine type", K_ENUM, &menuConfig.gameboy.gbType, gbTypeNames, 4, 0, 0, 0,
+	 "Restart game to switch emulated hardware"},
 	{"Palette", K_PALETTE, 0, 0, 0, 0, 0, 0,
 	 "Monochrome colour scheme, from palettes.ini"},
 	{"Colourise", K_ENUM, &menuConfig.gameboy.colorization, onOff, 2, 0, 0, 0,
@@ -948,6 +949,69 @@ int GameMenuAskResume(void)
 	return result;
 }
 
+//Prompt the user to restart now or later when machine type or colourise changes
+static int GameMenuAskRestart(const char *reason)
+{
+	int yes = 1, done = 0, result = 1;
+
+	LoadCursor();
+	SfxInit();
+	oslSetFramerate(60);
+	osl_keys->pressed.value = 0;
+
+	while (!osl_quit && !done)		{
+		int bx = 112, by = 90, bw = 256, bh = 92;
+
+		MyReadKeys();
+
+		if (osl_keys->pressed.left || osl_keys->pressed.right ||
+		    osl_keys->pressed.up || osl_keys->pressed.down)		{
+			yes = !yes;
+			SfxPlay(SFX_MOVE);
+		}
+		if (osl_keys->pressed.cross)		{
+			result = yes;
+			done = 1;
+			SfxPlay(SFX_SELECT);
+		}
+		if (osl_keys->pressed.circle)		{
+			result = 0;
+			done = 1;
+			SfxPlay(SFX_BACK);
+		}
+
+		oslStartDrawing();
+		oslSetAlpha(OSL_FX_ALPHA, 200);
+		MyDrawFillRect(0, 0, 479, 271, GB_DARKEST);
+		oslSetAlpha(OSL_FX_DEFAULT, 0);
+
+		MyDrawFillRect(bx, by, bx + bw, by + bh, GB_DARKEST);
+		MyDrawFillRect(bx, by, bx + 3, by + bh, GB_LIGHT);
+		MyDrawFillRect(bx, by, bx + bw, by + 1, GB_DARK);
+		MyDrawFillRect(bx, by + bh - 1, bx + bw, by + bh, GB_DARK);
+
+		oslSetFont(ftStandard);
+		oslSetBkColor(RGBA(0, 0, 0, 0));
+		oslSetTextColor(GB_LIGHTEST);
+		oslDrawString(bx + 18, by + 14, reason ? reason : "Hardware changed.");
+		oslDrawString(bx + 18, by + 30, "Restart game now to apply?");
+
+		oslSetTextColor(yes ? GB_LIGHTEST : GB_DARK);
+		oslDrawString(bx + 48, by + 60, "Restart");
+		oslSetTextColor(yes ? GB_DARK : GB_LIGHTEST);
+		oslDrawString(bx + 158, by + 60, "Later");
+		if (imgCursor)
+			oslDrawImageXY(imgCursor, (yes ? bx + 28 : bx + 138) - 4, by + 56);
+
+		oslEndDrawing();
+		oslSyncFrame();
+	}
+
+	osl_keys->pressed.value = 0;
+	gblSwallowInput = 120;
+	return result;
+}
+
 //Shown once, after the ROM is loaded and any snapshot restored, before the first
 //frame of play. Two jobs: say whether this is a continue or a fresh start, and let
 //the player press a button when they are ready rather than being dropped straight
@@ -1028,6 +1092,8 @@ static int savedStackPage[4], savedStackSel[4], savedStackScroll[4];
 void GameMenuShow(void)
 {
 	int page, sel, scroll, quit = 0, statusTime = 0;
+	int initialGbType = menuConfig.gameboy.gbType;
+	int initialColorization = menuConfig.gameboy.colorization;
 	//L is still held from opening the menu; ignore it until released, or the menu
 	//closes on the same press that opened it.
 	int menuKeyHeld = 1;
@@ -1208,6 +1274,18 @@ void GameMenuShow(void)
 	OverlaySync();
 	//Save any settings adjusted in the menu so they survive relaunch
 	SaveUserDefaultConfig();
+
+	//If the machine type or colorization setting changed, prompt to restart to take effect
+	if (menuConfig.gameboy.gbType != initialGbType ||
+	    menuConfig.gameboy.colorization != initialColorization) {
+		const char *reason = (menuConfig.gameboy.gbType != initialGbType)
+		                     ? "Machine type changed."
+		                     : "Colourise mode changed.";
+		if (GameMenuAskRestart(reason)) {
+			machine_reset();
+		}
+	}
+
 	osl_keys->pressed.value = 0;
 	//The dismissing press is still held; keep it out of the game for up to two
 	//seconds, or until the pad is released

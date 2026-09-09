@@ -2069,7 +2069,6 @@ SUBMENUITEM menuMainVideoGBTypeItems[]=		{
 	{"Game Boy (DMG)", NULL, "", NULL, 1},
 	{"Super Game Boy", NULL, "", NULL, 2},
 	{"Game Boy Color", NULL, "", NULL, 3},
-	{"Game Boy Advance", NULL, "", NULL, 4},
 };
 
 SUBMENU menuMainVideoSyncMode=		{
