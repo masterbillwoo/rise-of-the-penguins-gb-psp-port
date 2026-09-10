@@ -166,8 +166,10 @@ static const TRPAIR lang_de[] = {
 	{"X start", "X starten"},
 	{"Your own bindings, set on the Buttons page", "Eigene Belegung, auf der Seite Tasten"},
 	{"before you set off.", "Entscheidungen vor dem Start."},
+	{"empty", "leer"},
 	{"menu and change any of this.", "öffnen und alles zu ändern."},
 	{"shell?", "Gehäuse einfassen?"},
+	{"used", "belegt"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -329,8 +331,10 @@ static const TRPAIR lang_es[] = {
 	{"X start", "X empezar"},
 	{"Your own bindings, set on the Buttons page", "Tus botones, en la página Botones"},
 	{"before you set off.", "decisiones antes de partir."},
+	{"empty", "vacía"},
 	{"menu and change any of this.", "menú y cambiar todo esto."},
 	{"shell?", "carcasa portátil?"},
+	{"used", "ocupada"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -490,8 +494,10 @@ static const TRPAIR lang_fr[] = {
 	{"X start", "X démarrer"},
 	{"Your own bindings, set on the Buttons page", "Vos propres touches, page Touches"},
 	{"before you set off.", "rapides avant de partir."},
+	{"empty", "vide"},
 	{"menu and change any of this.", "menu et tout modifier."},
 	{"shell?", "de console ?"},
+	{"used", "occupé"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -651,8 +657,10 @@ static const TRPAIR lang_it[] = {
 	{"X start", "X inizia"},
 	{"Your own bindings, set on the Buttons page", "I tuoi tasti, nella pagina Tasti"},
 	{"before you set off.", "rapide prima di partire."},
+	{"empty", "vuoto"},
 	{"menu and change any of this.", "e cambiare tutto questo."},
 	{"shell?", "scocca portatile?"},
+	{"used", "occupato"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -814,8 +822,10 @@ static const TRPAIR lang_ja[] = {
 	{"X start", "X¤±º"},
 	{"Your own bindings, set on the Buttons page", "ÛĞæ£ÙçÌ…ƒ–½¹€œ"},
 	{"before you set off.", "‡±ºŒ†€¹®‘"},
+	{"empty", " "},
 	{"menu and change any of this.", "ŞÕáç…ƒ¸»®‘"},
 	{"shell?", "…Œ¯®‘…?"},
+	{"used", "€¹"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -975,8 +985,10 @@ static const TRPAIR lang_nl[] = {
 	{"X start", "X starten"},
 	{"Your own bindings, set on the Buttons page", "Je eigen knoppen, pagina Knoppen"},
 	{"before you set off.", "keuzes voor je vertrekt."},
+	{"empty", "leeg"},
 	{"menu and change any of this.", "openen en dit aan te passen."},
 	{"shell?", "behuizing zetten?"},
+	{"used", "bezet"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -1138,8 +1150,10 @@ static const TRPAIR lang_pl[] = {
 	{"X start", "X start"},
 	{"Your own bindings, set on the Buttons page", "W³asne przyciski, na stronie Przyciski"},
 	{"before you set off.", "decyzji przed startem."},
+	{"empty", "pusty"},
 	{"menu and change any of this.", "menu i zmieniæ te ustawienia."},
 	{"shell?", "przeno¶nej konsoli?"},
+	{"used", "zajêty"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -1301,8 +1315,10 @@ static const TRPAIR lang_pt[] = {
 	{"X start", "X começar"},
 	{"Your own bindings, set on the Buttons page", "Os teus botões, na página Botões"},
 	{"before you set off.", "rápidas antes de partires."},
+	{"empty", "vazia"},
 	{"menu and change any of this.", "o menu e mudar isto tudo."},
 	{"shell?", "portátil?"},
+	{"used", "ocupada"},
 };
 
 //Sorted by en: Tr() binary searches these.
@@ -1464,20 +1480,22 @@ static const TRPAIR lang_pt_br[] = {
 	{"X start", "X começar"},
 	{"Your own bindings, set on the Buttons page", "Seus botões, na página Botões"},
 	{"before you set off.", "rápidas antes de começar."},
+	{"empty", "vazio"},
 	{"menu and change any of this.", "o menu e mudar tudo isso."},
 	{"shell?", "portátil?"},
+	{"used", "ocupado"},
 };
 
 static const LANGUAGE languages[] = {
-	{"de", lang_de, 155},
-	{"es", lang_es, 159},
-	{"fr", lang_fr, 157},
-	{"it", lang_it, 157},
-	{"ja", lang_ja, 159},
-	{"nl", lang_nl, 157},
-	{"pl", lang_pl, 159},
-	{"pt", lang_pt, 159},
-	{"pt_br", lang_pt_br, 159},
+	{"de", lang_de, 157},
+	{"es", lang_es, 161},
+	{"fr", lang_fr, 159},
+	{"it", lang_it, 159},
+	{"ja", lang_ja, 161},
+	{"nl", lang_nl, 159},
+	{"pl", lang_pl, 161},
+	{"pt", lang_pt, 161},
+	{"pt_br", lang_pt_br, 161},
 	{0, 0, 0}
 };
 

@@ -180,5 +180,7 @@ X select  O back  [] default
 X start
 Your own bindings, set on the Buttons page
 before you set off.
+empty
 menu and change any of this.
 shell?
+used

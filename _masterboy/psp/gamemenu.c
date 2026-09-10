@@ -50,12 +50,40 @@ extern int pspLoadState(int slot);
 extern MENUPARAMS *menuConfigUserDefault;
 extern char *menuGetKeyName(char *dest, u32 maxLen, char *separator, u32 key);
 extern void SaveUserDefaultConfig(void);
+extern int fileExists(char *fileName);
 extern volatile int osl_vblCount;
 
 static OSL_IMAGE *imgCursor = NULL;
 static OSL_IMAGE *imgFrame = NULL;
 static int cursorTried = 0;
 static int stateSlot = 0;
+
+//Whether the snapshot slot on the Save/Load page holds anything. Without this the
+//row reads "State slot  3" and says nothing about whether there is a 3 to load -
+//you had to try it and read a message that clears after two seconds. Cached and
+//rechecked only when the slot changes, because it stats the Memory Stick and the
+//row is redrawn every frame.
+static int slotUsed = 0, slotChecked = -1;
+
+static void SlotCheck(void)
+{
+	char path[MAX_PATH];
+
+	if (slotChecked == stateSlot)
+		return;
+	slotChecked = stateSlot;
+	slotUsed = 0;
+	if (!menuConfig.file.filename[0])
+		return;
+	pspGetStateNameEx(menuConfig.file.filename, path, stateSlot);
+	slotUsed = fileExists(path);
+}
+
+//Call after anything that creates or removes a slot's file
+static void SlotForget(void)
+{
+	slotChecked = -1;
+}
 
 //--- Game Boy palettes -------------------------------------------------------
 //palettes.ini lists them as "_Name:" lines. They are read into a plain array
@@ -591,7 +619,7 @@ static void LoadCursor(void)
 //calls are not free, and nothing here changes faster than that.
 
 static char statusClock[24];	//date and time
-static char statusTime[12];	//time alone, for when the title leaves no room
+static char statusShort[12];	//time alone, for when the title leaves no room
 static int statusPercent = -1, statusAC = 0, statusLow = 0;
 
 static void StatusRefresh(void)
@@ -611,8 +639,8 @@ static void StatusRefresh(void)
 	else
 		snprintf(date, sizeof(date), "%02i/%02i", now.month, now.day);
 
-	snprintf(statusTime, sizeof(statusTime), "%02i:%02i", now.hour, now.minute);
-	snprintf(statusClock, sizeof(statusClock), "%s %s", date, statusTime);
+	snprintf(statusShort, sizeof(statusShort), "%02i:%02i", now.hour, now.minute);
+	snprintf(statusClock, sizeof(statusClock), "%s %s", date, statusShort);
 
 	statusAC = scePowerIsPowerOnline();
 	statusPercent = scePowerIsBatteryExist() ? scePowerGetBatteryLifePercent() : -1;
@@ -697,9 +725,9 @@ static void DrawStatus(const char *title)
 
 	if (x < limit)		{
 		if (statusPercent >= 0)
-			snprintf(text, sizeof(text), "%s  %i%%", statusTime, statusPercent);
+			snprintf(text, sizeof(text), "%s  %i%%", statusShort, statusPercent);
 		else
-			safe_strcpy(text, statusTime, sizeof(text));
+			safe_strcpy(text, statusShort, sizeof(text));
 	}
 	//Right-aligned from the actual text, whichever form was chosen
 	x = right - BATT_W - 6 - GetStringWidth(text);
@@ -782,7 +810,15 @@ static void ItemValue(const ITEM *it, char *dst, int size)
 				strncpy(dst, Tr(it->names[*it->field]), size - 1);
 			break;
 		case K_RANGE:
-			snprintf(dst, size, "%i", it->field ? *it->field : 0);
+			if (it->field == &stateSlot)		{
+				//Say whether there is anything in it, so the page can be read
+				//rather than probed
+				SlotCheck();
+				snprintf(dst, size, "%i  %s", stateSlot,
+				         slotUsed ? Tr("used") : Tr("empty"));
+			}
+			else
+				snprintf(dst, size, "%i", it->field ? *it->field : 0);
 			break;
 		case K_KEY:
 			menuGetKeyName(dst, size, "/", menuConfig.ctrl.akeys[it->arg]);
@@ -1198,6 +1234,7 @@ static int DoAction(int action, char *status, int size, int sel, int scroll)
 		case A_SAVESTATE:
 			snprintf(status, size, pspSaveState(stateSlot)
 			         ? Tr("Saved to slot %i") : Tr("Could not save slot %i"), stateSlot);
+			SlotForget();
 			break;
 		case A_LOADSTATE:
 			snprintf(status, size, pspLoadState(stateSlot)
@@ -1801,7 +1838,7 @@ void GameMenuShow(void)
 			ScalingPush();
 			PresetPull();
 			safe_strcpy(status, Tr("Reverted to default"), sizeof(status));
-			statusTime = 120;
+			statusTime = 180;
 			SfxPlay(SFX_SELECT);
 		}
 
@@ -1830,7 +1867,7 @@ void GameMenuShow(void)
 			}
 			else if (it->kind == K_ACTION)		{
 				quit = DoAction(it->arg, status, sizeof(status), sel, scroll);
-				statusTime = 120;
+				statusTime = 180;
 			}
 			else if (it->kind == K_KEY)		{
 				u32 k = CaptureKey(page, sel, scroll, it->label);

@@ -152,6 +152,8 @@
  "X start": "X starten",
  "Your own bindings, set on the Buttons page": "Eigene Belegung, auf der Seite Tasten",
  "before you set off.": "Entscheidungen vor dem Start.",
+ "empty": "leer",
  "menu and change any of this.": "öffnen und alles zu ändern.",
- "shell?": "Gehäuse einfassen?"
+ "shell?": "Gehäuse einfassen?",
+ "used": "belegt"
 }
